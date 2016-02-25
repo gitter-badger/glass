@@ -2,6 +2,7 @@
 
 FTP will be used as a simple preliminary protocol for payload exchange.
 
+Before connecting: GLASS
 
 # Sending a payload
 * connect to the destination glasshouse
@@ -10,8 +11,19 @@ FTP will be used as a simple preliminary protocol for payload exchange.
 
 The following require authentication:
 
+
 # Receiving payloads
 * GET [payload ID]
 
-# polling payloads
+# Polling payloads
 * ls
+
+# Retrieve AES key
+* KEY
+
+# Retrieve AES token
+* TOKEN
+
+# Continue authentication
+* USERNAME: [TOKEN]
+* PASSWORD: [SALT]
