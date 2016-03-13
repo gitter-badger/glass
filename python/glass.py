@@ -1,3 +1,5 @@
+import sys
+
 class GlassApp:
     def __init__(self, appInstance, glassClient = None):
         self.__queue = []
@@ -59,6 +61,9 @@ class AppInstance:
     def isServer(self):
         return len(self.instanceKey) == 0
 
+    def getServerAppInstance(self):
+        pass
+
 class Payload:
     def __init__(self, **kwargs):
         self.dict = kwargs
@@ -67,10 +72,11 @@ class Payload:
     def __str__(self):
         return str(self.dict)
 
-def App(appid, appclass):
-    def __init__(self, appId, appClass):
-        glass = Glass("user@localhost", appId)
-        # get server instance data from local archive
-        instance = glass.getServerInstance()
-        i = appClass(instance, glassClient=glass)
+class ServeApp:
+    def __init__(self, appClass):
+        userId = sys.argv[1]
+        appId = sys.argv[2]
+        glass = Glass(userId, appId)
+        appInstance = glass.getServerAppInstance()
+        i = appClass(appInstance, glassClient=glass)
         # poll i indefinitely

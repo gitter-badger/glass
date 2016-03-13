@@ -1,14 +1,13 @@
-from glass import App, GlassApp, Payload
+from glass import ServeApp, GlassApp, Payload
 
 class ChatAppServer(GlassApp):
     def onReceiveIncomingNotification(self, payload, internal=None):
         if internal is not False:
             self.sendNotification(self, payload)
         else:
-            self.sendNotification(self, payload, self.instanceId)
+            self.sendNotification(self, payload, self.clientInstance)
 
     def init(self):
-        self.instanceId = "0123456789ABCDEF"
+        self.clientInstance = self.glass.newInstance()
 
-
-app = App("com.glass.example.chat", ChatAppServer)
+app = ServeApp(ChatAppServer)
