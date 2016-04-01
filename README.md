@@ -1,6 +1,10 @@
 # glassbox
 There's no place like a safe cloud
 
+# Protocols
+* XMPP
+* SOCKS5
+* HTTP Cloud API
 
 
 ## Root Server
