@@ -10,6 +10,12 @@ import (
     "math/big"
 )
 
+/*
+    This test unit takes much code from other tests in the
+    crypto/rsa package. In particular their keys.
+    ** Still much to do! **
+*/
+
 var test2048Key *rsa.PrivateKey
 
 func fromBase10(base10 string) *big.Int {
