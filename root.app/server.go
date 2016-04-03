@@ -9,30 +9,37 @@ import (
     "encoding/binary"
 )
 
-// Protocol connection headers, both server-to-client and client-to-server
-// FIXME naming
-const PROTO_CONN_HEADER_C2S = "01234567"
-const PROTO_CONN_HEADER_S2C = "76543210"
+// First message sent from client
+const CLIENT_HELLO = "01234567"
+// Sent in response to a client hello
+const SERVER_HELLO = "76543210"
+
+type Server struct {
+
+}
 
 type Stream struct {
+    serv Server
     conn net.Conn
 }
 
-func (s Stream) Init(conn  net.Conn) bool {
+func (s Stream) Init(serv Server, conn net.Conn) bool {
     var b [8]byte
-    n, err := conn.Read(b[:])
+    // Hello phase
+    _, err := conn.Read(b[:])
     // Initial stream
-    if n != 8 || err != nil || strings.Compare(string(b[:]), PROTO_CONN_HEADER_C2S) != 0 {
+    if err != nil || strings.Compare(string(b[:]), CLIENT_HELLO) != 0 {
         s.Shutdown()
         return false
     }
     // Response stream
-    n, err = conn.Write([]byte(PROTO_CONN_HEADER_S2C))
-    if n != 8 || err != nil {
+    _, err = conn.Write([]byte(SERVER_HELLO))
+    if err != nil {
         s.Shutdown()
         return false
     }
     s.conn = conn
+    s.serv = serv
     return true
 }
 
@@ -48,6 +55,7 @@ func (s Stream) Shutdown() error {
 func (s Stream) Serve() {
     word := make([]byte, 8)
     conn := s.conn
+    var magic, head, body []byte
     var buf *bytes.Reader
     var headSize uint8
     var bodySize uint16
@@ -57,32 +65,32 @@ func (s Stream) Serve() {
             panic(err)
         }
         if word[0] != '\xff' {
-            continue
+            panic(err)
         }
-        magic := word[1:5]
+        magic = word[1:5]
+        // TODO Check if supported
         buf = bytes.NewReader(word[5:5])
         err = binary.Read(buf, binary.LittleEndian, &headSize)
         buf = bytes.NewReader(word[6:7])
         err = binary.Read(buf, binary.LittleEndian, &bodySize)
-		head := make([]byte, int(headSize))
+		head = make([]byte, int(headSize))
 		_, err = conn.Read(head)
 		if err != nil {
-			continue
+			panic(err)
 		}
-        body := make([]byte, int(bodySize))
+        body = make([]byte, int(bodySize))
         _, err = conn.Read(body)
 		if err != nil {
-			continue
+			panic(err)
 		}
-        go Process(magic, head, body)
+        go s.serv.Process(magic, head, body)
 	}
 }
 
-func Process(magic, head, body []byte) {
+// TODO
+func (s Server) Process(magic, head, body []byte) {}
 
-}
-
-func StartServer() (err error) {
+func (s Server) StartServer() (err error) {
 	ln, err := net.Listen("tcp", ":8081")
 	if err != nil {
 		return
@@ -94,9 +102,9 @@ func StartServer() (err error) {
 			time.Sleep(time.Second)
 			continue
 		}
-        s := new(Stream)
-        if s.Init(conn) {
-            go s.Serve()
+        stream := new(Stream)
+        if stream.Init(s, conn) {
+            go stream.Serve()
         }
 	}
 }
