@@ -1,10 +1,10 @@
 package main
 
-/*import (
+import (
     "fmt"
-    "bytes"
-    "encoding/binary"
-)*/
+//    "bytes"
+//    "encoding/binary"
+)
 
 type Packet interface {
     // Packet identifier
@@ -14,6 +14,8 @@ type Packet interface {
     To()   [16]byte
     // Get packet's payload
     Content() []byte
+    // Get representation
+    Bytes() []byte
 }
 
 /*
@@ -26,3 +28,11 @@ type MsgEncrypted struct {
     data    [  ]byte
 }
 */
+
+func init() {
+
+}
+
+func main() {
+    fmt.Println("Hello")
+}

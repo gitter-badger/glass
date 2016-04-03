@@ -11,14 +11,10 @@ import (
     "crypto/aes"
     "crypto/sha256"
     "io"
+    "errors"
 )
 
-type Packet interface {
-    Id() [16]byte
-    From() [16]byte
-    Content() []byte
-}
-
+/*
 func PKCS5Padding(src []byte, BlockSize int) ([]byte, int) {
     size := len(src)
     padlen := BlockSize - size % BlockSize
@@ -26,6 +22,7 @@ func PKCS5Padding(src []byte, BlockSize int) ([]byte, int) {
     padding := bytes.Repeat([]byte{byte(padlen)}, padlen)
     return append(src, padding...), nblocks
 }
+*/
 
 
 func PKCS5UnPadding(src []byte) []byte {
@@ -149,13 +146,11 @@ func (this *BaseEncryptedPacket) Bytes() ([]byte, error) {
 
     return buf.Bytes(), nil
 }
-/*
-func main() {
-    fmt.Println("Hello")
-}
-*/
 
-func (this *BaseEncryptedPacket) Import(head, body []byte) error {
+func (this *BaseEncryptedPacket) FromBytes(head, body []byte) error {
+    if len(head) != 512 + 32 {
+        return errors.New("Wrong head size")
+    }
     copy(this.partner[:], head[      :16    ])
     copy(this.key    [:], head[16    :16+256])
     copy(this.sig    [:], head[16+256:16+512])
