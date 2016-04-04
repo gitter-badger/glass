@@ -1,11 +1,5 @@
 package glass
 
-import (
-    "fmt"
-//    "bytes"
-//    "encoding/binary"
-)
-
 type Packet interface {
     // Packet identifier
     Id() [16]byte
@@ -28,11 +22,3 @@ type MsgEncrypted struct {
     data    [  ]byte
 }
 */
-
-func init() {
-
-}
-
-func main() {
-    fmt.Println("Hello")
-}
