@@ -1,4 +1,4 @@
-package main
+package glass
 
 import (
     "net"
@@ -68,7 +68,8 @@ func (s Stream) Serve() {
             panic(err)
         }
         magic = word[1:5]
-        // TODO Check if supported
+        // TODO Check first if this magic is supported
+        // If it isnt, the connection must be closed
         buf = bytes.NewReader(word[5:5])
         err = binary.Read(buf, binary.LittleEndian, &headSize)
         buf = bytes.NewReader(word[6:7])
@@ -88,7 +89,7 @@ func (s Stream) Serve() {
 }
 
 // TODO
-func (s Server) Process(magic, head, body []byte) {}
+func (s Server) Process(magic [4]byte, head, body []byte) {}
 
 func (s Server) StartServer() (err error) {
 	ln, err := net.Listen("tcp", ":8081")

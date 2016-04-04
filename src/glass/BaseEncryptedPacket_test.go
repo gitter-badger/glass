@@ -1,4 +1,4 @@
-package main
+package glass
 
 import (
     //"crypto"
