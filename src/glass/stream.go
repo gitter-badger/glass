@@ -13,8 +13,9 @@ const CLIENT_HELLO = "01234567"
 // Sent in response to a client hello
 const SERVER_HELLO = "76543210"
 
+
 type Instance interface {
-    KnownMagic(magic []byte) bool
+    IsSupportedMagic(magic []byte) bool
     Process(magic, head, body []byte)
 }
 
@@ -70,7 +71,7 @@ func (s Stream) Serve() {
         }
         magic = word[1:5]
         // Check first if this magic is supported
-        if !s.instance.KnownMagic(magic) {
+        if !s.instance.IsSupportedMagic(magic) {
             s.Shutdown()
             return
         }

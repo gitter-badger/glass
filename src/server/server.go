@@ -13,7 +13,7 @@ type Server struct {}
 func (s Server) Process(magic, head, body []byte) {}
 
 // TODO Check if this magic is supported
-func (s Server) KnownMagic(magic []byte) bool {
+func (s Server) IsSupportedMagic(magic []byte) bool {
     return true;
 }
 
