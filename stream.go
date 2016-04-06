@@ -109,5 +109,3 @@ func (s Stream) Serve() {
         go s.inst.Process(s, magic, head, body)
 	}
 }
-
-func main() {}

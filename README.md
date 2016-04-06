@@ -1,6 +1,7 @@
 # glassbox
 There's no place like a safe cloud
 
+[![Build Status](https://travis-ci.org/acondolu/glassbox.svg?branch=master)](https://travis-ci.org/acondolu/glassbox)
 ## Inspiring protocols
 * XMPP
 * SOCKS5
