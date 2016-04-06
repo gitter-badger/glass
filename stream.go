@@ -83,7 +83,7 @@ func (s Stream) Serve() {
         var magic [4]byte
         copy(magic[:], word[1:5])
         // Check first if this magic is supported
-        if !s.instance.IsSupportedMagic(magic) {
+        if !s.inst.IsSupportedMagic(magic) {
             s.Shutdown()
             return
         }
@@ -106,6 +106,8 @@ func (s Stream) Serve() {
 			panic(err)
 		}
         // Process packet
-        go s.instance.Process(s, magic, head, body)
+        go s.inst.Process(s, magic, head, body)
 	}
 }
+
+func main() {}
