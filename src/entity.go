@@ -1,4 +1,4 @@
-package glass
+package main
 
 type Entity struct {}
 

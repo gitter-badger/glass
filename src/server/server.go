@@ -3,14 +3,14 @@ package server
 import (
     "net"
     "time"
-    "glass"
+    "glassbox"
 )
 
 
 type Server struct {}
 
 // TODO Process this packet
-func (s Server) Process(orig glass.Stream, magic [4]byte, head, body []byte) {
+func (s Server) Process(orig glassbox.Stream, magic [4]byte, head, body []byte) {
 
 }
 
@@ -31,7 +31,7 @@ func (s Server) StartServer() (err error) {
 			time.Sleep(time.Second)
 			continue
 		}
-        stream := new(glass.Stream)
+        stream := new(glassbox.Stream)
         if stream.Init(s, conn) {
             go stream.Serve()
         }

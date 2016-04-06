@@ -1,10 +1,10 @@
 package client
 
 import (
-    "glass"
+    "glassbox"
 )
 
-type PacketHandlerFunc func(p glass.Packet) bool
+type PacketHandlerFunc func(p glassbox.Packet) bool
 type ConnHandlerFunc func(c net.Conn)
 
 
@@ -20,10 +20,10 @@ func (c Client) OnNewConnection(handler ConnHandlerFunc) {}
 
 
 func (c Client) Dial(Entity) (net.Conn, error) {}
-func (c Client) Send(glass.Packet) error {}
+func (c Client) Send(glassbox.Packet) error {}
 
 func (c Client) NewAuthorization() (string, error) {}
 
-func (c Client) EntityFromAddress(addr net.Addr) glass.Entity {
+func (c Client) EntityFromAddress(addr net.Addr) glassbox.Entity {
     return nil
 }
