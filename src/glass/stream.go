@@ -13,18 +13,26 @@ const CLIENT_HELLO = "01234567"
 // Sent in response to a client hello
 const SERVER_HELLO = "76543210"
 
+// A stream can be incoming or outgoing
+type StreamDirection int
+const (
+        STREAM_IN StreamDirection = iota
+        STREAM_OUT
+)
 
 type Instance interface {
-    IsSupportedMagic(magic []byte) bool
-    Process(magic, head, body []byte)
+    IsSupportedMagic(magic [4]byte) bool
+    Process(orig Stream, magic [4]byte, head, body []byte)
 }
 
 type Stream struct {
-    instance Instance
+    inst Instance
     conn net.Conn
+    key [8]byte
+    dir StreamDirection
 }
 
-func (s Stream) Init(instance Instance, conn net.Conn) bool {
+func (s Stream) Init(dir StreamDirection, inst Instance, conn net.Conn) bool {
     var b [8]byte
     // Hello phase
     _, err := conn.Read(b[:])
@@ -39,8 +47,10 @@ func (s Stream) Init(instance Instance, conn net.Conn) bool {
         s.Shutdown()
         return false
     }
+    // Initialize TLS? FIXME TODO
+    s.dir = dir
     s.conn = conn
-    s.instance = instance
+    s.inst = inst
     return true
 }
 
@@ -56,7 +66,7 @@ func (s Stream) Shutdown() error {
 func (s Stream) Serve() {
     word := make([]byte, 8)
     conn := s.conn
-    var magic, head, body []byte
+    var head, body []byte
     var buf *bytes.Reader
     var headSize uint8
     var bodySize uint16
@@ -67,9 +77,11 @@ func (s Stream) Serve() {
             panic(err)
         }
         if word[0] != '\xff' {
-            panic(err)
+            s.Shutdown()
+            return
         }
-        magic = word[1:5]
+        var magic [4]byte
+        copy(magic[:], word[1:5])
         // Check first if this magic is supported
         if !s.instance.IsSupportedMagic(magic) {
             s.Shutdown()
@@ -94,6 +106,6 @@ func (s Stream) Serve() {
 			panic(err)
 		}
         // Process packet
-        go s.instance.Process(magic, head, body)
+        go s.instance.Process(s, magic, head, body)
 	}
 }
