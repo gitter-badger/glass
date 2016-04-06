@@ -1,4 +1,4 @@
-package main
+package glassbox
 
 import (
 //    "fmt"

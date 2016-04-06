@@ -1,4 +1,4 @@
-package main
+package glassbox
 
 type Packet interface {
     // Packet identifier
