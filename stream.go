@@ -4,7 +4,6 @@ import (
     "net"
     //"errors"
     "bytes"
-    "strings"
     "encoding/binary"
 )
 
