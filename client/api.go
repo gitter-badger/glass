@@ -1,6 +1,7 @@
 package client
 
 import (
+    "net"
     "github.com/acondolu/glassbox"
 )
 
@@ -19,11 +20,16 @@ func (c Client) OnNewPacket(handler PacketHandlerFunc) {}
 func (c Client) OnNewConnection(handler ConnHandlerFunc) {}
 
 
-func (c Client) Dial(Entity) (net.Conn, error) {}
-func (c Client) Send(glassbox.Packet) error {}
-
-func (c Client) NewAuthorization() (string, error) {}
-
-func (c Client) EntityFromAddress(addr net.Addr) glassbox.Entity {
-    return nil
+func (c Client) Dial(glassbox.Entity) (net.Conn, error) {
+    return nil, nil
 }
+func (c Client) Send(glassbox.Packet) error {
+    return nil;
+}
+
+func (c Client) NewAuthorization() (string, error) {
+    return nil, nil
+}
+
+//func (c Client) EntityFromAddress(addr net.Addr) glassbox.Entity {
+//}

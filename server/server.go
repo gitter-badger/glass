@@ -32,7 +32,7 @@ func (s Server) StartServer() (err error) {
 			continue
 		}
         stream := new(glassbox.Stream)
-        if stream.Init(s, conn) {
+        if stream.Init(glassbox.STREAM_IN, s, conn) {
             go stream.Serve()
         }
 	}
