@@ -1,7 +1,7 @@
 package client
 
 import (
-    "glassbox"
+    "github.com/acondolu/glassbox"
 )
 
 type PacketHandlerFunc func(p glassbox.Packet) bool

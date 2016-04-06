@@ -3,7 +3,7 @@ package server
 import (
     "net"
     "time"
-    "glassbox"
+    "github.com/acondolu/glassbox"
 )
 
 
