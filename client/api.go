@@ -28,7 +28,7 @@ func (c Client) Send(glassbox.Packet) error {
 }
 
 func (c Client) NewAuthorization() (string, error) {
-    return nil, nil
+    return "", nil
 }
 
 //func (c Client) EntityFromAddress(addr net.Addr) glassbox.Entity {
