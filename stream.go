@@ -37,7 +37,7 @@ func (s Stream) Init(dir StreamDirection, inst Instance, conn net.Conn) bool {
     // Hello phase
     _, err := conn.Read(b[:])
     // Initial stream
-    if err != nil || strings.Compare(string(b[:]), CLIENT_HELLO) != 0 {
+    if err != nil || string(b[:]) != CLIENT_HELLO {
         s.Shutdown()
         return false
     }
