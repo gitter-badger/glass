@@ -10,7 +10,7 @@ import (
 type Server struct {}
 
 // TODO Process this packet
-func (s Server) Process(orig glassbox.Stream, magic [4]byte, head, body []byte) {
+func (s Server) Process(orig glassbox.PacketStream, magic [4]byte, head, body []byte) {
 
 }
 
@@ -26,14 +26,16 @@ func (s Server) StartServer() (err error) {
 	}
 	defer ln.Close()
 	for {
-		conn, err := ln.Accept()
+		_, err := ln.Accept()
 		if err != nil {
 			time.Sleep(time.Second)
 			continue
 		}
-        stream := new(glassbox.Stream)
-        if stream.Init(glassbox.STREAM_IN, s, conn) {
-            go stream.Serve()
-        }
+        stream := new(glassbox.PacketStream)
+        //if err = stream.Init(glassbox.STREAM_IN, s, conn, ...); err != nil {
+        //    stream.Shutdown()
+        //    return
+        //}
+        go stream.Serve()
 	}
 }
