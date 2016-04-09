@@ -8,7 +8,7 @@ type Packet interface {
     To()   [16]byte
     // Get packet's payload
     Content() []byte
-    // Get representation
+    // Get raw representation
     Bytes() []byte
 }
 

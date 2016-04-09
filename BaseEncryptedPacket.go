@@ -3,7 +3,7 @@ package glassbox
 import (
 //    "fmt"
     "bytes"
-    "encoding/binary"
+    //"encoding/binary"
     "crypto/cipher"
     "crypto"
     "crypto/rsa"
@@ -11,7 +11,7 @@ import (
     "crypto/aes"
     "crypto/sha256"
     "io"
-    "errors"
+    //"errors"
 )
 
 /*
@@ -37,34 +37,44 @@ func PKCS5UnPadding(src []byte) []byte {
 */
 type BaseEncryptedPacket struct {
     /*
-    0xff(1) magic(4) head_size(1) body_size(2)
-    partner(16)
+    magic(16)
+    to/from(16)
     enc_key(32) enc_sig(32)
     iv(16)
     data(...)
     */
+
     // The initialization vector for the AES encryption step,
     // and this packet's unique identifier
-    iv      [ 16]byte
+    iv      [16]byte
     // The identifier of the responsible application
-    appID   [ 32]byte
-    // The recipient or the sender of this packet
-    partner [ 16]byte
+    appID   [32]byte
+    // Sender
+    from [16]byte
+    // Recipient
+    to [ 16]byte
     // The encrypted key and the signature for the payload
     key     [256]byte
     sig     [256]byte
     // Cleartext
-    payload [   ]byte
+    payload []byte
     // Encrypted version of the cleartext
-    enc     [   ]byte
+    enc     []byte
+    // Packet direction
+    incoming bool
 }
 
-func (this *BaseEncryptedPacket) Encrypt(appID [32]byte, priv *rsa.PrivateKey, pub *rsa.PublicKey, payload []byte) (err error) {
+func (this *BaseEncryptedPacket) Encrypt(
+        appID [32]byte,
+        priv *rsa.PrivateKey, pub *rsa.PublicKey,payload []byte) (err error) {
+    // Set the packet as outgoing
+    this.incoming = false
+    // Set appID
     this.appID = appID
     //this.payload = payload
     rng := rand.Reader
     // Generate random key and initialization vector
-    var key [16]byte
+    var key [8]byte
     var iv [16]byte
     if _, err = io.ReadFull(rng, key[:]); err != nil {
         panic("RNG failure")
@@ -104,7 +114,7 @@ func (this *BaseEncryptedPacket) Encrypt(appID [32]byte, priv *rsa.PrivateKey, p
 	d := sha256.New()
 	d.Reset()
     for _, k := range [][]byte{
-            []byte("G"), appID[:], []byte("L"), iv[:], []byte("A"), this.partner[:], []byte("S"),
+            []byte("G"), appID[:], []byte("L"), iv[:], []byte("A"), this.to[:], []byte("S"),
         } {
         d.Write(k)
     }
@@ -121,52 +131,36 @@ func (this *BaseEncryptedPacket) Encrypt(appID [32]byte, priv *rsa.PrivateKey, p
 }
 
 func (this *BaseEncryptedPacket) Bytes() ([]byte, error) {
-    var err error
     buf := new(bytes.Buffer)
-    // 1) 0xff (1 octet)
-    // 2) magic (4 octets)
-    buf.WriteString("\xff\x01\x00\x00\x00")
-    // 3) Head size (1 octet)
-    buf.WriteString("\x2c") // 44*2 bytes use uint8 here!
-    // 4) Body size
-    //
-    // Write the size of the payload in AES blocks
-    // (including padding!)
-    var size int = len(this.enc)
-    err = binary.Write(buf, binary.LittleEndian, uint16(size / 16))
-    if err != nil {
+    // magic (16 octets)
+    buf.WriteString("\xff\x01\x00\x00\x00\x00\x00\x00")
+    buf.WriteString("\xff\x01\x00\x00\x00\x00\x00\x00")
 
-    }
-
-    buf.Write(this.partner[:])
-    buf.Write(this.key    [:])
-    buf.Write(this.sig    [:])
-    buf.Write(this.iv     [:])
-    buf.Write(this.enc       )
+    buf.Write(this.to[:])
+    buf.Write(this.key[:])
+    buf.Write(this.sig[:])
+    buf.Write(this.iv[:])
+    buf.Write(this.enc)
 
     return buf.Bytes(), nil
 }
+//err = binary.Write(buf, binary.LittleEndian, uint16(size / 16))
 
-func (this *BaseEncryptedPacket) FromBytes(head, body []byte) error {
-    if len(head) != 512 + 32 {
-        return errors.New("Wrong head size")
-    }
-    copy(this.partner[:], head[      :16    ])
-    copy(this.key    [:], head[16    :16+256])
-    copy(this.sig    [:], head[16+256:16+512])
-    copy(this.iv     [:], head[16+512:32+512])
-    this.enc = body
+// Parse a packet from a byte stream
+func (this *BaseEncryptedPacket) FromBytes(data []byte) error {
+    copy(this.from[:], data[      :16    ])
+    copy(this.key    [:], data[16    :16+256])
+    copy(this.sig    [:], data[16+256:16+512])
+    copy(this.iv     [:], data[16+512:32+512])
+    this.enc = data[32+512:]
+    // Decrypt here!
     return nil
 }
 
-func (this *BaseEncryptedPacket) From() [16]byte {
-    return this.partner
-}
+func (this *BaseEncryptedPacket) From() [16]byte { return this.from }
+func (this *BaseEncryptedPacket) To() [16]byte { return this.to }
+func (this *BaseEncryptedPacket) Id() [16]byte { return this.iv }
 
 func (this *BaseEncryptedPacket) Decrypt(priv *rsa.PrivateKey, pub *rsa.PublicKey) []byte {
-    return this.partner[:]
-}
-
-func (this *BaseEncryptedPacket) Id() [16]byte {
-    return this.iv
+    return []byte{}
 }
