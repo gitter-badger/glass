@@ -10,6 +10,7 @@ import (
     "crypto/aes"
     "crypto/cipher"
     "io"
+    "fmt"
 )
 
 type Instance interface {
@@ -18,7 +19,7 @@ type Instance interface {
 }
 
 type PacketStream struct {
-    inst Instance
+    inst *Instance
     conn net.Conn
     // AES-GCM values
     secret [16]byte // AES-128
@@ -64,11 +65,11 @@ func (this *PacketStream) nonce(n uint32) ([]byte, error) {
     copy(b, this.nonce_init[:])
     N := make([]byte, 4)
     if _, err = buf.Read(N); err != nil { return nil, err}
-    b[0] ^= N[0]; b[3] ^= N[3]; b[6] ^= N[6]; b[9] ^= N[9]
+    b[0] ^= N[0]; b[3] ^= N[1]; b[6] ^= N[2]; b[9] ^= N[3]
     return b, nil
 }
 
-func (this *PacketStream) In(inst Instance, conn net.Conn, cert tls.Certificate) (err error){
+func (this *PacketStream) In(inst *Instance, conn net.Conn, cert *tls.Certificate) (err error){
     var b [8]byte
     var tlsConfig *tls.Config
     var tlsConn *tls.Conn
@@ -79,14 +80,15 @@ func (this *PacketStream) In(inst Instance, conn net.Conn, cert tls.Certificate)
     // Sent in response to a client hello
     SERVER_HELLO := []byte("76543210")
 
+    fmt.Println(">hellok")
     // Phase 1: HELLO
-    _, err = conn.Read(b[:])
-    if err != nil { return }
+    if _, err = conn.Read(b[:]); err != nil { return }
     if !bytes.Equal(b[:], CLIENT_HELLO) { return nil } // FIXME
     if _, err = conn.Write(SERVER_HELLO); err != nil { return }
+    fmt.Println(">/hellok")
     // Phase 2: Negotiate TLS connection
     tlsConfig = &tls.Config{
-        Certificates: []tls.Certificate{cert},
+        Certificates: []tls.Certificate{*cert},
         ClientAuth: tls.VerifyClientCertIfGiven,
         ServerName: "example.com",
     }
@@ -108,7 +110,7 @@ func (this *PacketStream) In(inst Instance, conn net.Conn, cert tls.Certificate)
     return nil
 }
 
-func (this *PacketStream) Out(inst Instance, conn net.Conn, cert tls.Certificate) (err error){
+func (this *PacketStream) Out(inst *Instance, conn net.Conn, cert *tls.Certificate) (err error){
     var b [8]byte
     var tlsConfig *tls.Config
     var tlsConn *tls.Conn
@@ -124,9 +126,10 @@ func (this *PacketStream) Out(inst Instance, conn net.Conn, cert tls.Certificate
     if _, err = conn.Write(SERVER_HELLO); err != nil { return }
     if _, err = conn.Read(b[:]); err != nil { return }
     if !bytes.Equal(b[:], CLIENT_HELLO) { return nil } // FIXME
+    fmt.Println("Hello phase over")
     // Phase 2: Negotiate TLS connection
     tlsConfig = &tls.Config{
-        Certificates: []tls.Certificate{cert},
+        Certificates: []tls.Certificate{*cert},
         ServerName: "example.com",
     }
     tlsConn = tls.Client(conn, tlsConfig)
@@ -239,6 +242,6 @@ func Process(s *PacketStream, ciphertext, nonce []byte) {
 	if aesgcm, err = cipher.NewGCM(block); err != nil { return }
     _, err = aesgcm.Open(ciphertext[0:], nonce, ciphertext, nil)
     if err == nil {
-        s.inst.Process(s, ciphertext)
+        (*(s.inst)).Process(s, ciphertext)
     }
 }
