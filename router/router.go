@@ -1,4 +1,4 @@
-package server
+package router
 
 import (
     "net"
@@ -7,19 +7,19 @@ import (
 )
 
 
-type Server struct {}
+type Router struct {}
 
 // TODO Process this packet
-func (s Server) Process(orig glassbox.PacketStream, magic [4]byte, head, body []byte) {
-
+func (r Router) Process(orig glassbox.PacketStream, data []byte) {
+    // TODO
 }
 
 // TODO Check if this magic is supported
-func (s Server) IsSupportedMagic(magic [4]byte) bool {
+func (r Router) IsSupportedMagic(magic [4]byte) bool {
     return false;
 }
 
-func (s Server) StartServer() (err error) {
+func (r Router) StartServer() (err error) {
 	ln, err := net.Listen("tcp", ":8081")
 	if err != nil {
 		return

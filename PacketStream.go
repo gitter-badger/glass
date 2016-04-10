@@ -29,6 +29,7 @@ type PacketStream struct {
     conn net.Conn
 
     secret [16]byte
+    nonce int // FIXME
     // FIXME TODO add here a counter for the exchanged blocks.
     // in GCM, 96 bit nonces can only produce 2^32 different blocks
     // (at 16 bytes per block)
