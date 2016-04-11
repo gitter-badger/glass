@@ -19,7 +19,7 @@ type Instance interface {
 }
 
 type PacketStream struct {
-    inst *Instance
+    inst Instance
     conn net.Conn
     // AES-GCM values
     secret [16]byte // AES-128
@@ -69,7 +69,7 @@ func (this *PacketStream) nonce(n uint32) ([]byte, error) {
     return b, nil
 }
 
-func (this *PacketStream) In(inst *Instance, conn net.Conn, cert *tls.Certificate) (err error){
+func (this *PacketStream) In(inst Instance, conn net.Conn, cert *tls.Certificate) (err error){
     var b [8]byte
     var tlsConfig *tls.Config
     var tlsConn *tls.Conn
@@ -110,7 +110,7 @@ func (this *PacketStream) In(inst *Instance, conn net.Conn, cert *tls.Certificat
     return nil
 }
 
-func (this *PacketStream) Out(inst *Instance, conn net.Conn, cert *tls.Certificate) (err error){
+func (this *PacketStream) Out(inst Instance, conn net.Conn, cert *tls.Certificate) (err error){
     var b [8]byte
     var tlsConfig *tls.Config
     var tlsConn *tls.Conn
@@ -242,6 +242,6 @@ func Process(s *PacketStream, ciphertext, nonce []byte) {
 	if aesgcm, err = cipher.NewGCM(block); err != nil { return }
     _, err = aesgcm.Open(ciphertext[0:], nonce, ciphertext, nil)
     if err == nil {
-        (*(s.inst)).Process(s, ciphertext)
+        s.inst.Process(s, ciphertext)
     }
 }

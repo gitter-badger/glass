@@ -20,7 +20,7 @@ func (r Router) IsSupportedMagic(magic [4]byte) bool {
     return false;
 }
 
-func (r Router) Start(cert tls.Certificate) (err error) {
+func (r *Router) Start(cert *tls.Certificate) (err error) {
     var ln net.Listener
     var conn net.Conn
 	ln, err = net.Listen("tcp", ":8081")
