@@ -56,7 +56,7 @@ func main() {
     sign()
     var appID [32]byte
     copy(appID[:], []byte("01234567890123456789012345678901"))
-    a := new(BaseEncryptedPacket)
+    a := new(SimplePacket)
     a.Encrypt(
         appID,
         test2048Key,

@@ -14,6 +14,8 @@ import (
     //"errors"
 )
 
+const PACKET_SIMPLE = "\xff\x01"
+
 /*
 func PKCS5Padding(src []byte, BlockSize int) ([]byte, int) {
     size := len(src)
@@ -31,11 +33,11 @@ func PKCS5UnPadding(src []byte) []byte {
     return src[:(length - padlen)]
 }
 
-/*  BaseEncryptedPacket is the base and most general packet format.
+/*  SimplePacket is the base and most general packet format.
     It consists mainly of the TLS cipher:
     TLS_RSA_WITH_AES_128_CBC_SHA (with RSA-2048)
 */
-type BaseEncryptedPacket struct {
+type SimplePacket struct {
     /*
     magic(16)
     to/from(16)
@@ -64,7 +66,7 @@ type BaseEncryptedPacket struct {
     incoming bool
 }
 
-func (this *BaseEncryptedPacket) Encrypt(
+func (this *SimplePacket) Encrypt(
         appID [32]byte,
         priv *rsa.PrivateKey, pub *rsa.PublicKey,payload []byte) (err error) {
     // Set the packet as outgoing
@@ -130,7 +132,7 @@ func (this *BaseEncryptedPacket) Encrypt(
     return nil
 }
 
-func (this *BaseEncryptedPacket) Bytes() ([]byte, error) {
+func (this *SimplePacket) Bytes() ([]byte, error) {
     buf := new(bytes.Buffer)
     // magic (16 octets)
     buf.WriteString("\xff\x01\x00\x00\x00\x00\x00\x00")
@@ -147,7 +149,7 @@ func (this *BaseEncryptedPacket) Bytes() ([]byte, error) {
 //err = binary.Write(buf, binary.LittleEndian, uint16(size / 16))
 
 // Parse a packet from a byte stream
-func (this *BaseEncryptedPacket) FromBytes(data []byte) error {
+func (this *SimplePacket) FromBytes(data []byte) error {
     copy(this.from[:], data[      :16    ])
     copy(this.key    [:], data[16    :16+256])
     copy(this.sig    [:], data[16+256:16+512])
@@ -157,10 +159,10 @@ func (this *BaseEncryptedPacket) FromBytes(data []byte) error {
     return nil
 }
 
-func (this *BaseEncryptedPacket) From() [16]byte { return this.from }
-func (this *BaseEncryptedPacket) To() [16]byte { return this.to }
-func (this *BaseEncryptedPacket) Id() [16]byte { return this.iv }
+func (this *SimplePacket) From() [16]byte { return this.from }
+func (this *SimplePacket) To() [16]byte { return this.to }
+func (this *SimplePacket) Id() [16]byte { return this.iv }
 
-func (this *BaseEncryptedPacket) Decrypt(priv *rsa.PrivateKey, pub *rsa.PublicKey) []byte {
+func (this *SimplePacket) Decrypt(priv *rsa.PrivateKey, pub *rsa.PublicKey) []byte {
     return []byte{}
 }

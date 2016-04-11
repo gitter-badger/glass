@@ -11,9 +11,7 @@ import (
 type Router struct {}
 
 // TODO Process this packet
-func (r Router) Process(orig *glassbox.PacketStream, data []byte) {
-    // TODO
-}
+func (Router) ProcessSimplePacket(p *glassbox.SimplePacket) { }
 
 // TODO Check if this magic is supported
 func (r Router) IsSupportedMagic(magic [4]byte) bool {

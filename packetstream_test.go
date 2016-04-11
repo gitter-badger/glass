@@ -2,12 +2,22 @@ package glassbox
 
 import (
     "net"
-    "io/ioutil"
+    //"io/ioutil"
     "testing"
     //"crypto/rsa"
     //"math/big"
     "fmt"
+    "sync"
 )
+
+type SimpleInstance struct {
+    W sync.WaitGroup
+}
+
+func (i *SimpleInstance) ProcessSimplePacket(p *SimplePacket) {
+    defer i.W.Done()
+    fmt.Println("Something happens!!!")
+}
 
 func Test(t *testing.T) {
     // Key from the RSA module tests
@@ -26,6 +36,8 @@ func Test(t *testing.T) {
     t.Logf("%d", priv.D)
     */
     fmt.Println("Starting")
+    var wg sync.WaitGroup
+    wg.Add(1)
     go func() {
         fmt.Println("client goroutine started. Dialing...")
         conn, err := net.Dial("tcp", "localhost:3001")
@@ -50,7 +62,7 @@ func Test(t *testing.T) {
     }
     defer l.Close()
     fmt.Println("Listening to connections")
-    for {
+    //for {
         conn, err := l.Accept()
         fmt.Println("Connection accepted")
         if err != nil {
@@ -58,19 +70,22 @@ func Test(t *testing.T) {
         }
         defer conn.Close()
         ps := new(PacketStream)
+        inst := new(SimpleInstance)
+        inst.W = wg
         fmt.Println("Starting handshake 2")
-        ps.Out(nil, conn, nil)
+        ps.Out(inst, conn, nil)
         //_ = ps.In;
-        buf, err := ioutil.ReadAll(conn)
-        if err != nil {
-            t.Fatal(err)
-        }
+        //buf, err := ioutil.ReadAll(conn)
+        //if err != nil {
+        //    t.Fatal(err)
+        //}
 
-        fmt.Println("Received %d bytes: %s.", len(buf), string(buf[:]))
+        //fmt.Println("Received %d bytes: %s.", len(buf), string(buf[:]))
         //if msg := string(buf[:]); msg != message {
         //    t.Fatalf("Unexpected message:\nGot:\t\t%s\nExpected:\t%s\n", msg, message)
         //}
-        break
-    }
-    return // Done
+        wg.Wait()
+    //    break
+    //}
+    //return // Done
 }

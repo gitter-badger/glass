@@ -13,11 +13,6 @@ import (
     "fmt"
 )
 
-type Instance interface {
-    //IsSupportedMagic(magic [4]byte) bool
-    Process(orig *PacketStream, data []byte)
-}
-
 type PacketStream struct {
     inst Instance
     conn net.Conn
@@ -227,13 +222,13 @@ func (s *PacketStream) Serve() {
             break
         }
         // Process packet
-        go Process(s, data, nonce)
+        go s.process(data, nonce)
     }
     s.Shutdown(err)
 }
 
 // Decrypt the packet and give it to the instance
-func Process(s *PacketStream, ciphertext, nonce []byte) {
+func (s *PacketStream) process(ciphertext, nonce []byte) {
     var err error
     var block cipher.Block
     var aesgcm cipher.AEAD
@@ -241,7 +236,18 @@ func Process(s *PacketStream, ciphertext, nonce []byte) {
     if block, err = aes.NewCipher(s.secret[:]); err != nil { return }
 	if aesgcm, err = cipher.NewGCM(block); err != nil { return }
     _, err = aesgcm.Open(ciphertext[0:], nonce, ciphertext, nil)
-    if err == nil {
-        s.inst.Process(s, ciphertext)
+    if err != nil {
+        // If the message was not encrypted correctly,
+        // just ignore it. Does this lead to problems?
+        return
     }
+    // Parse the packet type!
+    magic := string(ciphertext[0:2])
+    if magic == PACKET_SIMPLE {
+        p := new(SimplePacket)
+        p.FromBytes(ciphertext)
+        s.inst.ProcessSimplePacket(p)
+    }
+    // If the message type is not supported,
+    // just ignore it. Does this lead to problems?
 }
