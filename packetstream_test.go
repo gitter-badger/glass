@@ -7,37 +7,20 @@ import (
     //"crypto/rsa"
     //"math/big"
     "fmt"
-    "sync"
+    //"sync"
 )
 
 type SimpleInstance struct {
-    W sync.WaitGroup
+    PS *PacketStream
 }
-
-func (i *SimpleInstance) ProcessSimplePacket(p *SimplePacket) {
-    defer i.W.Done()
-    fmt.Println("[--] Packet Recevied Correctly. Exiting...")
+func (i *SimpleInstance) ProcessSimplePacket(p *SimplePacket) {}
+func (i *SimpleInstance) ProcessTestPacket(p *TestPacket) {
+    fmt.Println("[--] Packet Received Correctly. Exiting...")
+    i.PS.Shutdown(nil)
 }
 
 func Test(t *testing.T) {
-    // Key from the RSA module tests
-    /*
-    priv := &rsa.PrivateKey{
-    PublicKey: rsa.PublicKey{
-        N: fromBase10("290684273230919398108010081414538931343"),
-        E: 65537,
-    },
-    D: fromBase10("31877380284581499213530787347443987241"),
-    Primes: []*big.Int{
-        fromBase10("16775196964030542637"),
-        fromBase10("17328218193455850539"),
-    },
-    }
-    t.Logf("%d", priv.D)
-    */
     fmt.Println("[--] Starting")
-    var wg sync.WaitGroup
-    wg.Add(1)
     go func() {
         fmt.Println("[->] Client goroutine started. Dialing...")
         conn, err := net.Dial("tcp", "localhost:3001")
@@ -51,11 +34,13 @@ func Test(t *testing.T) {
         fmt.Println("[->] Starting Handshake")
         if err := ps.Out(nil, conn, nil); err != nil {
             t.Fatal(err.Error())
-            wg.Done()
         }
         fmt.Println("[->] Handshake Over")
         p := new(TestPacket)
-        ps.Write(p)
+        err = ps.Send(p)
+        if err != nil {
+            fmt.Println(err.Error())
+        }
         //ps.init(STREAM_)
         //        t.Fatal(g, e)
         conn.Close()
@@ -76,7 +61,7 @@ func Test(t *testing.T) {
         defer conn.Close()
         ps := new(PacketStream)
         inst := new(SimpleInstance)
-        inst.W = wg
+        inst.PS = ps
         fmt.Println("[<-] Starting Handshake")
         if err = ps.In(inst, conn, nil); err != nil {
             t.Fatal(err)
@@ -93,7 +78,7 @@ func Test(t *testing.T) {
         //if msg := string(buf[:]); msg != message {
         //    t.Fatalf("Unexpected message:\nGot:\t\t%s\nExpected:\t%s\n", msg, message)
         //}
-        wg.Wait()
+        ps.Serve()
     //    break
     //}
     //return // Done

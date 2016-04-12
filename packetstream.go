@@ -10,7 +10,7 @@ import (
     "crypto/aes"
     "crypto/cipher"
     "io"
-    "fmt"
+    "log"
 )
 
 type PacketStream struct {
@@ -89,7 +89,7 @@ func (this *PacketStream) In(inst Instance, conn net.Conn, cert *tls.Certificate
     tlsConn = tls.Server(conn, tlsConfig)
     tlsConn.Handshake()
     */
-    fmt.Println("[<-] Simple Hello Phase Over")
+    log.Println("[<-] Simple Hello Phase Over")
     // Phase 3: Agree on a secret, forget about TLS
     x := make([]byte, 14)
     y := make([]byte, 14)
@@ -122,7 +122,7 @@ func (this *PacketStream) Out(inst Instance, conn net.Conn, cert *tls.Certificat
     if _, err = conn.Write(CLIENT_HELLO); err != nil { return }
     if _, err = conn.Read(b[:]); err != nil { return }
     if !bytes.Equal(b[:], SERVER_HELLO) { return nil } // FIXME
-    fmt.Println("[->] Simple Hello Phase Over")
+    log.Println("[->] Simple Hello Phase Over")
     // Phase 2: Negotiate TLS connection
     /*tlsConfig = &tls.Config{
         Certificates: []tls.Certificate{*cert},
@@ -148,10 +148,16 @@ func (this *PacketStream) Out(inst Instance, conn net.Conn, cert *tls.Certificat
     return nil
 }
 
-func (s *PacketStream) Write(p Packet) (err error) {
+func (s *PacketStream) Send(p Packet) error {
+    // FIXME: queue
+    return s.write(p)
+}
+
+func (s *PacketStream) write(p Packet) (err error) {
     // See: https://gist.github.com/kkirsche/e28da6754c39d5e7ea10
     data := p.Bytes()
-    if len(data) % 16 != 0 {
+    size := len(data)
+    if size % 16 != 0 || size == 0 {
         return errors.New("Wrong packet size")
     }
     // Encrypt data with AES128-GCM
@@ -163,25 +169,26 @@ func (s *PacketStream) Write(p Packet) (err error) {
 	if aesgcm, err = cipher.NewGCM(block); err != nil { return }
 	data = aesgcm.Seal(nil, nonce, data, nil)
 
-    conn := s.conn
-    // 1) Send size
-    size := len(data)
-    if size % 16 != 0 {
+    // 1) Send size (2 octets)
+    if len(data) != size + 16 {
+        log.Printf("%d %d", len(data), size)
         return errors.New("Wrong packet size after GCM")
         // Should never happen FIXME
     }
     buf := new(bytes.Buffer)
-    err = binary.Write(buf, binary.BigEndian, uint16(size / 16))
+    err = binary.Write(buf, binary.BigEndian, uint16(1 + size / 16))
     if err != nil { return }
     two := make([]byte, 2)
     if _, err = buf.Read(two); err != nil { return }
-    conn.Write(two)
+    log.Printf("[->] Send length: %s\n", string(two[:]))
+    s.conn.Write(two)
     s.count_out += 2
     // 2) Send initialization vector
     //if _, err = io.ReadFull(rand.Reader, iv); err != nil { return }
     //conn.Write(iv)
     // 3) Send AES128-encrypted data
-    _, err = conn.Write(data)
+    _, err = s.conn.Write(data)
+    log.Println("[->] Packet sent")
     return
 }
 
@@ -217,6 +224,7 @@ func (s *PacketStream) Serve() {
         if length == 0 {
             break
         }
+        log.Printf("[<-] Incoming packet. Size=%d\n", length)
         // Read *length* blocks of data
         data = make([]byte, int(length) * 16)
         _, err = conn.Read(data)
@@ -224,33 +232,43 @@ func (s *PacketStream) Serve() {
             break
         }
         // Process packet
-        go s.process(data, nonce)
+        s.process(data, nonce)
     }
+    log.Println("[<-] Goodbye")
     s.Shutdown(err)
 }
 
 // Decrypt the packet and give it to the instance
 func (s *PacketStream) process(ciphertext, nonce []byte) {
-    fmt.Println("[--] Processing Packet")
     var err error
     var block cipher.Block
     var aesgcm cipher.AEAD
-
+    log.Println("[--] Processing incoming packet")
     if block, err = aes.NewCipher(s.secret[:]); err != nil { return }
 	if aesgcm, err = cipher.NewGCM(block); err != nil { return }
-    _, err = aesgcm.Open(ciphertext[0:], nonce, ciphertext, nil)
+    payload, err := aesgcm.Open(nil, nonce, ciphertext, nil)
     if err != nil {
         // If the message was not encrypted correctly,
         // just ignore it. Does this lead to problems?
+        log.Println("Message decryption failed")
         return
     }
+    log.Println("[  ] Incoming packet correctly decrypted")
     // Parse the packet type!
-    magic := string(ciphertext[0:2])
+    //ciphertext = ciphertext[16:]
+    magic := string(payload[0:2])
     if magic == PACKET_SIMPLE {
         p := new(SimplePacket)
-        p.FromBytes(ciphertext)
+        p.FromBytes(payload)
         s.inst.ProcessSimplePacket(p)
+    } else if (magic == PACKET_TEST) {
+        log.Println("[  ] Received test packet, processing...")
+        p := new(TestPacket)
+        p.FromBytes(payload)
+        s.inst.ProcessTestPacket(p)
+    } else {
+        // If the message type is not supported,
+        // just ignore it. Does this lead to problems?
+        log.Println("[  ] Unknown incoming packet type: ingnoring.")
     }
-    // If the message type is not supported,
-    // just ignore it. Does this lead to problems?
 }

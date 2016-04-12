@@ -1,5 +1,7 @@
 package glassbox
 
+const PACKET_TEST = "\x00\x00"
+
 type TestPacket struct {}
 
 
@@ -17,5 +19,9 @@ func (p *TestPacket) Content() []byte {
     return []byte("16-bytes-string!")
 }
 func (p *TestPacket) Bytes() []byte {
-    return make([]byte, 0)
+    return []byte(PACKET_TEST + "14bytes string" + "16-bytes-string!")
+}
+
+func (p *TestPacket) FromBytes(bs []byte) {
+    // TODO
 }
