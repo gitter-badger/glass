@@ -16,7 +16,7 @@ type SimpleInstance struct {
 
 func (i *SimpleInstance) ProcessSimplePacket(p *SimplePacket) {
     defer i.W.Done()
-    fmt.Println("Something happens!!!")
+    fmt.Println("[--] Packet Recevied Correctly. Exiting...")
 }
 
 func Test(t *testing.T) {
@@ -35,20 +35,25 @@ func Test(t *testing.T) {
     }
     t.Logf("%d", priv.D)
     */
-    fmt.Println("Starting")
+    fmt.Println("[--] Starting")
     var wg sync.WaitGroup
     wg.Add(1)
     go func() {
-        fmt.Println("client goroutine started. Dialing...")
+        fmt.Println("[->] Client goroutine started. Dialing...")
         conn, err := net.Dial("tcp", "localhost:3001")
         if err != nil {
             t.Fatal(err)
         }
+        fmt.Println("[->] Connected")
         defer conn.Close()
 
         ps := new(PacketStream)
-        fmt.Println("Starting handshake 1")
-        ps.In(nil, conn, nil)
+        fmt.Println("[->] Starting Handshake")
+        if err := ps.Out(nil, conn, nil); err != nil {
+            t.Fatal(err.Error())
+            wg.Done()
+        }
+        fmt.Println("[->] Handshake Over")
         p := new(TestPacket)
         ps.Write(p)
         //ps.init(STREAM_)
@@ -61,10 +66,10 @@ func Test(t *testing.T) {
         t.Fatal(err)
     }
     defer l.Close()
-    fmt.Println("Listening to connections")
+    fmt.Println("[<-] Listening to connections")
     //for {
         conn, err := l.Accept()
-        fmt.Println("Connection accepted")
+        fmt.Println("[<-] Connection accepted")
         if err != nil {
             return
         }
@@ -72,8 +77,12 @@ func Test(t *testing.T) {
         ps := new(PacketStream)
         inst := new(SimpleInstance)
         inst.W = wg
-        fmt.Println("Starting handshake 2")
-        ps.Out(inst, conn, nil)
+        fmt.Println("[<-] Starting Handshake")
+        if err = ps.In(inst, conn, nil); err != nil {
+            t.Fatal(err)
+            return
+        }
+        fmt.Println("[<-] Handshake Over")
         //_ = ps.In;
         //buf, err := ioutil.ReadAll(conn)
         //if err != nil {
