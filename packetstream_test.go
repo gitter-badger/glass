@@ -10,11 +10,14 @@ import (
     //"sync"
 )
 
-type SimpleInstance struct {
-    PS *PacketStream
-}
-func (i *SimpleInstance) ProcessSimplePacket(p *SimplePacket) {}
-func (i *SimpleInstance) ProcessTestPacket(p *TestPacket) {
+type SimpleApp struct { PS *PacketStream }
+func (*SimpleApp) Init(string) {}
+func (*SimpleApp) Dial(Entity) (net.Conn, error) { return nil, nil }
+func (*SimpleApp) Send(Packet) error { return nil }
+func (*SimpleApp) IncomingConnection(net.Conn) {}
+func (*SimpleApp) ProcessSimplePacket(*SimplePacket) {}
+
+func (i *SimpleApp) ProcessTestPacket(p *TestPacket) {
     fmt.Println("[--] Packet Received Correctly. Exiting...")
     i.PS.Shutdown(nil)
 }
@@ -60,7 +63,7 @@ func Test(t *testing.T) {
         }
         defer conn.Close()
         ps := new(PacketStream)
-        inst := new(SimpleInstance)
+        inst := new(SimpleApp)
         inst.PS = ps
         fmt.Println("[<-] Starting Handshake")
         if err = ps.In(inst, conn, nil); err != nil {

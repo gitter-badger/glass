@@ -9,15 +9,12 @@ import (
 
 
 type Router struct {}
-
-// TODO Process this packet
-func (Router) ProcessSimplePacket(p *glassbox.SimplePacket) { }
-func (Router) ProcessTestPacket(p *glassbox.TestPacket) { }
-
-// TODO Check if this magic is supported
-func (r Router) IsSupportedMagic(magic [4]byte) bool {
-    return false;
-}
+func (*Router) Init(string) {}
+func (*Router) Dial(glassbox.Entity) (net.Conn, error) { return nil, nil }
+func (*Router) Send(glassbox.Packet) error { return nil }
+func (*Router) IncomingConnection(net.Conn) {}
+func (*Router) ProcessSimplePacket(*glassbox.SimplePacket) { }
+func (*Router) ProcessTestPacket(*glassbox.TestPacket) { }
 
 func (r *Router) Start(cert *tls.Certificate) (err error) {
     var ln net.Listener

@@ -14,7 +14,7 @@ import (
 )
 
 type PacketStream struct {
-    inst Instance
+    handler App
     conn net.Conn
     // AES-GCM values
     secret [16]byte // AES-128
@@ -64,7 +64,7 @@ func (this *PacketStream) nonce(n uint32) ([]byte, error) {
     return b, nil
 }
 
-func (this *PacketStream) In(inst Instance, conn net.Conn, cert *tls.Certificate) (err error){
+func (this *PacketStream) In(handler App, conn net.Conn, cert *tls.Certificate) (err error){
     var b [8]byte
     //var tlsConfig *tls.Config
     //var tlsConn *tls.Conn
@@ -100,13 +100,13 @@ func (this *PacketStream) In(inst Instance, conn net.Conn, cert *tls.Certificate
     // Generate AES128 data
     this.generateSecret(x, y)
     // Return successfully
-    this.inst = inst
+    this.handler = handler
     this.count_in = 0
     this.count_out = 1
     return nil
 }
 
-func (this *PacketStream) Out(inst Instance, conn net.Conn, cert *tls.Certificate) (err error){
+func (this *PacketStream) Out(handler App, conn net.Conn, cert *tls.Certificate) (err error){
     var b [8]byte
     //var tlsConfig *tls.Config
     //var tlsConn *tls.Conn
@@ -142,7 +142,7 @@ func (this *PacketStream) Out(inst Instance, conn net.Conn, cert *tls.Certificat
     //// Generate AES128 data
     this.generateSecret(x, y)
     // Return successfully
-    this.inst = inst
+    this.handler = handler
     this.count_in = 1
     this.count_out = 0
     return nil
@@ -238,7 +238,7 @@ func (s *PacketStream) Serve() {
     s.Shutdown(err)
 }
 
-// Decrypt the packet and give it to the instance
+// Decrypt the packet and give it to the app
 func (s *PacketStream) process(ciphertext, nonce []byte) {
     var err error
     var block cipher.Block
@@ -260,12 +260,12 @@ func (s *PacketStream) process(ciphertext, nonce []byte) {
     if magic == PACKET_SIMPLE {
         p := new(SimplePacket)
         p.FromBytes(payload)
-        s.inst.ProcessSimplePacket(p)
+        s.handler.ProcessSimplePacket(p)
     } else if (magic == PACKET_TEST) {
         log.Println("[  ] Received test packet, processing...")
         p := new(TestPacket)
         p.FromBytes(payload)
-        s.inst.ProcessTestPacket(p)
+        s.handler.ProcessTestPacket(p)
     } else {
         // If the message type is not supported,
         // just ignore it. Does this lead to problems?
