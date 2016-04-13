@@ -54,14 +54,15 @@ func sign() (err error) {
 // appID [32]byte, priv *rsa.PrivateKey, pub *rsa.PublicKey, payload []byte
 func main() {
     sign()
-    var appID [32]byte
-    copy(appID[:], []byte("01234567890123456789012345678901"))
-    a := new(SimpleFrame)
-    a.Encrypt(
-        appID,
+    var AppName [16]byte
+    copy(AppName[:], []byte("01234567890123456789012345678901"))
+    frame := &SimpleFrame{
+        AppName: AppName,
+        Content: []byte("This is a test payload"),
+    }
+    frame.Seal(
         test2048Key,
         &test2048Key.PublicKey,
-        []byte("This is a test payload"),
     )
 }
 

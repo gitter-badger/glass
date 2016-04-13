@@ -7,7 +7,6 @@ import (
     "crypto/cipher"
     "crypto"
     "crypto/rsa"
-    "crypto/rand"
     "crypto/aes"
     "crypto/sha256"
     "io"
@@ -40,55 +39,41 @@ func PKCS5UnPadding(src []byte) []byte {
 type SimpleFrame struct {
     /*
     magic(16)
-    to/from(16)
+    from(16)
+    to(16)
     enc_key(32) enc_sig(32)
-    iv(16)
     data(...)
     */
 
-    // The initialization vector for the AES encryption step,
-    // and this packet's unique identifier
-    iv      [16]byte
     // The identifier of the responsible application
-    appID   [32]byte
+    AppName [16]byte
     // Sender
-    from [16]byte
+    From [16]byte
     // Recipient
-    to [ 16]byte
+    To [16]byte
     // The encrypted key and the signature for the payload
-    key     [256]byte
-    sig     [256]byte
+    key [256]byte
+    sig [256]byte
     // Cleartext
-    payload []byte
+    Content []byte
     // Encrypted version of the cleartext
-    enc     []byte
-    // Frame direction
-    incoming bool
+    enc []byte
 }
 
-func (this *SimpleFrame) Encrypt(
-        appID [32]byte,
-        priv *rsa.PrivateKey, pub *rsa.PublicKey,payload []byte) (err error) {
-    // Set the packet as outgoing
-    this.incoming = false
-    // Set appID
-    this.appID = appID
-    //this.payload = payload
-    rng := rand.Reader
-    // Generate random key and initialization vector
+func (frame *SimpleFrame) Seal(
+        priv *rsa.PrivateKey,
+        pub *rsa.PublicKey,
+    ) (err error) {
+    // Generate random key
     var key [8]byte
-    var iv [16]byte
-    if _, err = io.ReadFull(rng, key[:]); err != nil {
+    if _, err = io.ReadFull(RNG, key[:]); err != nil {
         panic("RNG failure")
     }
-    if _, err = io.ReadFull(rng, iv[:]); err != nil {
-        panic("RNG failure")
-    }
-    this.iv = iv
     // AES-encrypt payload with (key, iv)
     const blocksize = aes.BlockSize
+    iv := bytes.Repeat([]byte{0x00}, blocksize)
     //// the payload will be PKCS5-padded on the fly
-    size := len(payload)
+    size := len(frame.Content)
     padlen := blocksize - size % blocksize
     padding := bytes.Repeat([]byte{byte(padlen)}, padlen)
 
@@ -99,16 +84,16 @@ func (this *SimpleFrame) Encrypt(
     cbc := cipher.NewCBCEncrypter(aes, iv[:])
     j := size - (size % blocksize)
     if j > 0 {
-        cbc.CryptBlocks(buf[:j], payload[:j])
+        cbc.CryptBlocks(buf[:j], frame.Content[:j])
         cbc = cipher.NewCBCEncrypter(aes, buf[j-blocksize:j])
     }
     var buffer bytes.Buffer
-    buffer.Write(payload[j:])
+    buffer.Write(frame.Content[j:])
     buffer.Write(iv[:])
-    buffer.Write(appID[:])
+    buffer.Write(frame.AppName[:])
     buffer.Write(padding)
     cbc.CryptBlocks(buf[j:], buffer.Bytes())
-    this.enc = buf
+    frame.enc = buf
 
     // Sign the data
     //// "G" app_id(32) "L" iv(16) "A" partner(16) "S"
@@ -116,53 +101,51 @@ func (this *SimpleFrame) Encrypt(
 	d := sha256.New()
 	d.Reset()
     for _, k := range [][]byte{
-            []byte("G"), appID[:], []byte("L"), iv[:], []byte("A"), this.to[:], []byte("S"),
+            []byte("G"), frame.AppName[:], []byte("L"), iv[:], []byte("A"), frame.To[:], []byte("S"),
         } {
         d.Write(k)
     }
-	d.Write(payload)
+	d.Write(frame.Content)
     // FIXME: is padding missing? is it automatic?
 	hashed := d.Sum(nil)
-    signature, err := rsa.SignPKCS1v15(rand.Reader, priv, crypto.SHA256, hashed[:])
+    signature, err := rsa.SignPKCS1v15(RNG, priv, crypto.SHA256, hashed[:])
     if err != nil {
         return
     }
     // assert len(signature) == 256
-    copy(this.sig[:], signature)
+    copy(frame.sig[:], signature)
     return nil
 }
 
-func (this *SimpleFrame) Bytes() ([]byte, error) {
+func (frame *SimpleFrame) Bytes() ([]byte, error) {
     buf := new(bytes.Buffer)
     // magic (16 octets)
     buf.WriteString("\xff\x01\x00\x00\x00\x00\x00\x00")
     buf.WriteString("\xff\x01\x00\x00\x00\x00\x00\x00")
 
-    buf.Write(this.to[:])
-    buf.Write(this.key[:])
-    buf.Write(this.sig[:])
-    buf.Write(this.iv[:])
-    buf.Write(this.enc)
+    buf.Write(frame.From[:])
+    buf.Write(frame.To[:])
+    buf.Write(frame.key[:])
+    buf.Write(frame.sig[:])
+    buf.Write(frame.enc)
 
     return buf.Bytes(), nil
 }
 //err = binary.Write(buf, binary.LittleEndian, uint16(size / 16))
 
 // Parse a packet from a byte stream
-func (this *SimpleFrame) FromBytes(data []byte) error {
-    copy(this.from[:], data[      :16    ])
-    copy(this.key    [:], data[16    :16+256])
-    copy(this.sig    [:], data[16+256:16+512])
-    copy(this.iv     [:], data[16+512:32+512])
-    this.enc = data[32+512:]
+func (frame *SimpleFrame) Read(data []byte) error {
+    copy(frame.From   [:], data[      :16    ])
+    copy(frame.To     [:], data[      :32    ])
+    copy(frame.key    [:], data[32    :32+256])
+    copy(frame.sig    [:], data[32+256:32+512])
+    frame.enc = data[32+512:]
     // Decrypt here!
     return nil
 }
 
-func (this *SimpleFrame) From() [16]byte { return this.from }
-func (this *SimpleFrame) To() [16]byte { return this.to }
-func (this *SimpleFrame) Id() [16]byte { return this.iv }
+func (*SimpleFrame) Id() [16]byte { return *new([16]byte) } // FIXME!
 
-func (this *SimpleFrame) Decrypt(priv *rsa.PrivateKey, pub *rsa.PublicKey) []byte {
+func (frame *SimpleFrame) Decrypt(priv *rsa.PrivateKey, pub *rsa.PublicKey) []byte {
     return []byte{}
 }

@@ -29,6 +29,7 @@ type FrameStream struct {
 var CLIENT_HELLO []byte
 var SERVER_HELLO []byte
 var strongCipherSuites []uint16
+var RNG io.Reader
 
 // Initialize global constants
 func init() {
@@ -37,6 +38,8 @@ func init() {
     SERVER_HELLO = []byte("76543210") // Response to a client hello
     // Choose cipher suites
     strongCipherSuites = []uint16{tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA}
+    //
+    RNG = rand.Reader
 }
 
 func shuffle(x []byte) {
@@ -287,7 +290,7 @@ func (s *FrameStream) process(ciphertext, nonce []byte) {
     magic := string(payload[0:2])
     if magic == PACKET_SIMPLE {
         p := new(SimpleFrame)
-        p.FromBytes(payload)
+        p.Read(payload)
         s.handler.ProcessSimpleFrame(p)
     } else if (magic == PACKET_TEST) {
         log.Println("[  ] Received test packet, processing...")
