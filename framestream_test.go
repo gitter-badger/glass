@@ -10,16 +10,11 @@ import (
     //"sync"
 )
 
-type TestHandler struct { PS *FrameStream }
-func (*TestHandler) Init(string) {}
-func (*TestHandler) Dial(Peer) (net.Conn, error) { return nil, nil }
-func (*TestHandler) Send(Frame) error { return nil }
-func (*TestHandler) IncomingConnection(net.Conn) {}
-func (*TestHandler) ProcessSimpleFrame(*SimpleFrame) {}
+var fs FrameStream
 
-func (i *TestHandler) ProcessTestFrame(p *TestFrame) {
+func ProcessTestFrame(p *TestFrame) {
     fmt.Println("[S] Frame Received Correctly. Exiting...")
-    i.PS.Shutdown(nil)
+    fs.Shutdown(nil)
 }
 
 func Test(t *testing.T) {
@@ -62,11 +57,10 @@ func Test(t *testing.T) {
             return
         }
         defer conn.Close()
-        ps := new(FrameStream)
-        inst := new(TestHandler)
-        inst.PS = ps
+        defer conn.Close()
+        app := &App{ProcessTestFrame: ProcessTestFrame}
         fmt.Println("[S] Starting Handshake")
-        if err = ps.In(inst, conn); err != nil {
+        if err = fs.In(app, conn); err != nil {
             t.Fatal(err)
             return
         }
@@ -81,7 +75,7 @@ func Test(t *testing.T) {
         //if msg := string(buf[:]); msg != message {
         //    t.Fatalf("Unexpected message:\nGot:\t\t%s\nExpected:\t%s\n", msg, message)
         //}
-        ps.Serve()
+        fs.Serve()
     //    break
     //}
     //return // Done

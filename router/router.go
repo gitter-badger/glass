@@ -8,13 +8,9 @@ import (
 )
 
 
-type Router struct {}
-func (*Router) Init(string) {}
-func (*Router) Dial(glass.Peer) (net.Conn, error) { return nil, nil }
-func (*Router) Send(glass.Frame) error { return nil }
-func (*Router) IncomingConnection(net.Conn) {}
-func (*Router) ProcessSimpleFrame(*glass.SimpleFrame) {}
-func (*Router) ProcessTestFrame(*glass.TestFrame) {}
+type Router struct {
+    glass.App
+}
 
 func (r *Router) Serve() (err error) {
     var ln net.Listener
@@ -30,9 +26,9 @@ func (r *Router) Serve() (err error) {
 			time.Sleep(time.Second)
 			continue
 		}
-        stream := new(glass.FrameStream)
-        if err = stream.In(r, conn); err != nil {
-            stream.Shutdown(err)
+        var stream *glass.FrameStream
+        if stream = r.In(conn); stream == nil {
+            stream.Shutdown(nil) // FIXME
             return // FIXME
         }
         go stream.Serve()

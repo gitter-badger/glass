@@ -16,7 +16,6 @@ import (
 )
 
 type FrameStream struct {
-    handler Handler
     conn net.Conn
     // AES-GCM values
     secret [16]byte // AES-128
@@ -24,6 +23,8 @@ type FrameStream struct {
     // Frames counter
     count_in uint32
     count_out uint32
+    //
+    app *App
 }
 
 var CLIENT_HELLO []byte
@@ -72,22 +73,20 @@ func (this *FrameStream) generateSecret(x, y []byte) {
 }
 
 // Generate a unique nonce for the given n in the current session
-func (this *FrameStream) nonce(n uint32) ([]byte, error) {
+func (stream *FrameStream) nonce(n uint32) ([]byte, error) {
     buf := new(bytes.Buffer)
     err := binary.Write(buf, binary.BigEndian, n)
     b := make([]byte, 12)
-    copy(b, this.nonce_init[:])
+    copy(b, stream.nonce_init[:])
     N := make([]byte, 4)
     if _, err = buf.Read(N); err != nil { return nil, err}
     b[0] ^= N[0]; b[3] ^= N[1]; b[6] ^= N[2]; b[9] ^= N[3]
     return b, nil
 }
 
-func (this *FrameStream) In(
-        handler Handler, conn net.Conn,
-//        cert tls.Certificate,
-    ) (err error) {
+func (this *FrameStream) In(app *App, conn net.Conn) (err error) {
     this.conn = conn
+    this.app = app
 
     // Phase 1: HELLO
     eight := make([]byte, 8)
@@ -121,17 +120,14 @@ func (this *FrameStream) In(
     // Generate AES data
     this.generateSecret(x, y)
 
-    this.handler = handler
     this.count_in = 0
     this.count_out = 1
     return
 }
 
-func (this *FrameStream) Out(
-        handler Handler, conn net.Conn,
-//        mycert *tls.Certificate, mycert2 *x509.Certificate, hercert *x509.Certificate,
-    ) (err error) {
+func (this *FrameStream) Out(app *App, conn net.Conn) (err error) {
     this.conn = conn
+    this.app = app
 
     // Phase 1: HELLO
     eight := make([]byte, 8)
@@ -173,7 +169,6 @@ func (this *FrameStream) Out(
     // - Generate AES128-GCM data
     this.generateSecret(x, y)
 
-    this.handler = handler
     this.count_in = 1
     this.count_out = 0
     return
@@ -263,19 +258,18 @@ func (s *FrameStream) Serve() {
             break
         }
         // Process packet
-        s.process(data, nonce)
+        s.processFrame(data, nonce)
     }
     log.Println("[<-] Goodbye")
     s.Shutdown(err)
 }
 
-// Decrypt the packet and give it to the app
-func (s *FrameStream) process(ciphertext, nonce []byte) {
+func (stream *FrameStream) processFrame(ciphertext, nonce []byte) {
     var err error
     var block cipher.Block
     var aesgcm cipher.AEAD
     log.Println("[--] Processing incoming packet")
-    if block, err = aes.NewCipher(s.secret[:]); err != nil { return }
+    if block, err = aes.NewCipher(stream.secret[:]); err != nil { return }
 	if aesgcm, err = cipher.NewGCM(block); err != nil { return }
     payload, err := aesgcm.Open(nil, nonce, ciphertext, nil)
     if err != nil {
@@ -285,21 +279,5 @@ func (s *FrameStream) process(ciphertext, nonce []byte) {
         return
     }
     log.Println("[  ] Incoming packet correctly decrypted")
-    // Parse the packet type!
-    //ciphertext = ciphertext[16:]
-    magic := string(payload[0:2])
-    if magic == PACKET_SIMPLE {
-        p := new(SimpleFrame)
-        p.Read(payload)
-        s.handler.ProcessSimpleFrame(p)
-    } else if (magic == PACKET_TEST) {
-        log.Println("[  ] Received test packet, processing...")
-        p := new(TestFrame)
-        p.FromBytes(payload)
-        s.handler.ProcessTestFrame(p)
-    } else {
-        // If the message type is not supported,
-        // just ignore it. Does this lead to problems?
-        log.Println("[  ] Unknown incoming packet type: ingnoring.")
-    }
+    stream.app.processFrame(payload)
 }

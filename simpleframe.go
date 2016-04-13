@@ -1,19 +1,35 @@
 package glass
 
 import (
-//    "fmt"
+    "io"
     "bytes"
-    //"encoding/binary"
-    "crypto/cipher"
     "crypto"
     "crypto/rsa"
     "crypto/aes"
     "crypto/sha256"
-    "io"
+    "crypto/cipher"
     //"errors"
 )
 
-const PACKET_SIMPLE = "\xff\x01"
+/*
+Structure of the frame:
+
+|-------|-------|
+| Name  | Bytes |
+|-------|-------|
+| 0xff  | 1     |
+| 0x01  | 1     |
+| ?     | 14    |
+| from  | 16    |
+| to    | 16    |
+| key   | 256   |
+| sig   | 256   |
+| data  | var   |
+
+*/
+
+
+const FRAME_SIMPLE = "\xff\x01"
 
 /*
 func PKCS5Padding(src []byte, BlockSize int) ([]byte, int) {
@@ -37,14 +53,6 @@ func PKCS5UnPadding(src []byte) []byte {
     TLS_RSA_WITH_AES_128_CBC_SHA (with RSA-2048)
 */
 type SimpleFrame struct {
-    /*
-    magic(16)
-    from(16)
-    to(16)
-    enc_key(32) enc_sig(32)
-    data(...)
-    */
-
     // The identifier of the responsible application
     AppName [16]byte
     // Sender
@@ -117,35 +125,37 @@ func (frame *SimpleFrame) Seal(
     return nil
 }
 
-func (frame *SimpleFrame) Bytes() ([]byte, error) {
+func (frame *SimpleFrame) Bytes() []byte {
     buf := new(bytes.Buffer)
-    // magic (16 octets)
+    // magic (16 byte)
     buf.WriteString("\xff\x01\x00\x00\x00\x00\x00\x00")
-    buf.WriteString("\xff\x01\x00\x00\x00\x00\x00\x00")
+    buf.WriteString("\x00\x00\x00\x00\x00\x00\x00\x00")
 
-    buf.Write(frame.From[:])
-    buf.Write(frame.To[:])
-    buf.Write(frame.key[:])
-    buf.Write(frame.sig[:])
+    buf.Write(frame.From[:]) // 16 byte
+    buf.Write(frame.To  [:]) // 16 byte
+    buf.Write(frame.key[:]) // 32 byte
+    buf.Write(frame.sig[:]) // 32 byte
     buf.Write(frame.enc)
 
-    return buf.Bytes(), nil
+    return buf.Bytes()
 }
 //err = binary.Write(buf, binary.LittleEndian, uint16(size / 16))
 
 // Parse a packet from a byte stream
-func (frame *SimpleFrame) Read(data []byte) error {
+func (frame *SimpleFrame) Read(data []byte) bool {
+    if len(data) < 512 + 32 {
+        return false
+    }
     copy(frame.From   [:], data[      :16    ])
     copy(frame.To     [:], data[      :32    ])
     copy(frame.key    [:], data[32    :32+256])
     copy(frame.sig    [:], data[32+256:32+512])
     frame.enc = data[32+512:]
-    // Decrypt here!
-    return nil
+    return true
 }
 
 func (*SimpleFrame) Id() [16]byte { return *new([16]byte) } // FIXME!
 
-func (frame *SimpleFrame) Decrypt(priv *rsa.PrivateKey, pub *rsa.PublicKey) []byte {
+func (frame *SimpleFrame) Open(priv *rsa.PrivateKey, pub *rsa.PublicKey) []byte {
     return []byte{}
 }

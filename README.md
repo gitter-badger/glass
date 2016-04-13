@@ -2,13 +2,16 @@
 There's no place like a safe cloud
 
 ## Description
-Glass is a protocol for routing packets based on public-key cryptography.
+Glass is a routing protocol based on public-key cryptography.
+
 It is also a framework for end-to-end-encrypted multi-application communication.
 
 Currently being implemented in [Go](https://golang.org).
 
 ## Status [![Build Status](https://travis-ci.org/acondolu/glass.svg?branch=master)](https://travis-ci.org/acondolu/glass)
-This is in **pre-alpha** stage. More developers welcome ;)
+This is in **pre-alpha** stage. If you are a user, stay away from this very preliminary software!
+
+If instead you are a developer, you are very welcome ;)
 
 ## Terminology
 * **router**: the service provider, a public server routing packets to users and apps;
