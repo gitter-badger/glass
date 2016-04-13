@@ -8,7 +8,7 @@ type App struct {
     Handler Handler
 }
 
-func (App) Init(auth string) {
+func (App) Init(auth AuthToken) {
     //
 }
 

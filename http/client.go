@@ -11,7 +11,7 @@ import (
 
 var app *glass.App
 
-func Init(auth string) {
+func Init(auth glass.AuthToken) {
     app.Init(auth)
 }
 
