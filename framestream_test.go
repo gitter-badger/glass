@@ -1,4 +1,4 @@
-package glassbox
+package glass
 
 import (
     "net"
@@ -10,36 +10,36 @@ import (
     //"sync"
 )
 
-type SimpleApp struct { PS *PacketStream }
-func (*SimpleApp) Init(string) {}
-func (*SimpleApp) Dial(Entity) (net.Conn, error) { return nil, nil }
-func (*SimpleApp) Send(Packet) error { return nil }
-func (*SimpleApp) IncomingConnection(net.Conn) {}
-func (*SimpleApp) ProcessSimplePacket(*SimplePacket) {}
+type TestHandler struct { PS *FrameStream }
+func (*TestHandler) Init(string) {}
+func (*TestHandler) Dial(Peer) (net.Conn, error) { return nil, nil }
+func (*TestHandler) Send(Frame) error { return nil }
+func (*TestHandler) IncomingConnection(net.Conn) {}
+func (*TestHandler) ProcessSimpleFrame(*SimpleFrame) {}
 
-func (i *SimpleApp) ProcessTestPacket(p *TestPacket) {
-    fmt.Println("[--] Packet Received Correctly. Exiting...")
+func (i *TestHandler) ProcessTestFrame(p *TestFrame) {
+    fmt.Println("[S] Frame Received Correctly. Exiting...")
     i.PS.Shutdown(nil)
 }
 
 func Test(t *testing.T) {
-    fmt.Println("[--] Starting")
+    fmt.Println("[-] Starting")
     go func() {
-        fmt.Println("[->] Client goroutine started. Dialing...")
+        fmt.Println("[C] Client goroutine started. Dialing...")
         conn, err := net.Dial("tcp", "localhost:3001")
         if err != nil {
             t.Fatal(err)
         }
-        fmt.Println("[->] Connected")
+        fmt.Println("[C] Connected")
         defer conn.Close()
 
-        ps := new(PacketStream)
-        fmt.Println("[->] Starting Handshake")
-        if err := ps.Out(nil, conn, nil); err != nil {
+        ps := new(FrameStream)
+        fmt.Println("[C] Starting Handshake")
+        if err := ps.Out(nil, conn); err != nil {
             t.Fatal(err.Error())
         }
-        fmt.Println("[->] Handshake Over")
-        p := new(TestPacket)
+        fmt.Println("[C] Handshake Over")
+        p := new(TestFrame)
         err = ps.Send(p)
         if err != nil {
             fmt.Println(err.Error())
@@ -54,23 +54,23 @@ func Test(t *testing.T) {
         t.Fatal(err)
     }
     defer l.Close()
-    fmt.Println("[<-] Listening to connections")
+    fmt.Println("[S] Listening to connections")
     //for {
         conn, err := l.Accept()
-        fmt.Println("[<-] Connection accepted")
+        fmt.Println("[S] Connection accepted")
         if err != nil {
             return
         }
         defer conn.Close()
-        ps := new(PacketStream)
-        inst := new(SimpleApp)
+        ps := new(FrameStream)
+        inst := new(TestHandler)
         inst.PS = ps
-        fmt.Println("[<-] Starting Handshake")
-        if err = ps.In(inst, conn, nil); err != nil {
+        fmt.Println("[S] Starting Handshake")
+        if err = ps.In(inst, conn); err != nil {
             t.Fatal(err)
             return
         }
-        fmt.Println("[<-] Handshake Over")
+        fmt.Println("[S] Handshake Over")
         //_ = ps.In;
         //buf, err := ioutil.ReadAll(conn)
         //if err != nil {

@@ -1,7 +1,7 @@
-package glassbox
+package glass
 
-type Packet interface {
-    // Packet identifier
+type Frame interface {
+    // Frame identifier
     Id() [16]byte
     // Get sender/recipient
     From() [16]byte

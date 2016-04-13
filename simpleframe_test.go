@@ -1,4 +1,4 @@
-package glassbox
+package glass
 
 import (
     //"crypto"
@@ -56,7 +56,7 @@ func main() {
     sign()
     var appID [32]byte
     copy(appID[:], []byte("01234567890123456789012345678901"))
-    a := new(SimplePacket)
+    a := new(SimpleFrame)
     a.Encrypt(
         appID,
         test2048Key,

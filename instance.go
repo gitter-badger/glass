@@ -1,7 +1,7 @@
-package glassbox
+package glass
 
 type Instance interface {
-    ProcessSimplePacket(p *SimplePacket)
-    // Test Packet
-    ProcessTestPacket(p *TestPacket)
+    ProcessSimpleFrame(p *SimpleFrame)
+    // Test Frame
+    ProcessTestFrame(p *TestFrame)
 }

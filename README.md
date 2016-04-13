@@ -1,4 +1,4 @@
-# glassbox [![Build Status](https://travis-ci.org/acondolu/glassbox.svg?branch=master)](https://travis-ci.org/acondolu/glassbox)
+# glass
 There's no place like a safe cloud
 
 ## Description
@@ -6,6 +6,9 @@ Glass is a protocol for routing packets based on public-key cryptography.
 It is also a framework for end-to-end-encrypted multi-application communication.
 
 Currently being implemented in [Go](https://golang.org).
+
+## Status [![Build Status](https://travis-ci.org/acondolu/glass.svg?branch=master)](https://travis-ci.org/acondolu/glass)
+This is in **pre-alpha** stage. More developers welcome ;)
 
 ## Terminology
 * **router**: the service provider, a public server routing packets to users and apps;

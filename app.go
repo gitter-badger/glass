@@ -1,18 +1,29 @@
-package glassbox
+package glass
 
 import (
     "net"
 )
 
-type App interface {
-    Init(auth string)
+type App struct {
+    Handler Handler
+}
 
-    Dial(Entity) (net.Conn, error)
-    Send(Packet) error
+func (App) Init(auth string) {
+    //
+}
 
+func (App) Dial(Peer) (net.Conn, error) {
+    return nil, nil
+}
+func (App) Send(Frame) error {
+    return nil
+}
+
+
+type Handler interface {
     // Connection Handler
     IncomingConnection(net.Conn)
-    // Packet Handlers
-    ProcessSimplePacket(*SimplePacket)
-    ProcessTestPacket(*TestPacket)
+    // Frames Handlers
+    ProcessSimpleFrame(*SimpleFrame)
+    ProcessTestFrame(*TestFrame)
 }

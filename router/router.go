@@ -3,20 +3,20 @@ package router
 import (
     "net"
     "time"
-    "crypto/tls"
-    "github.com/acondolu/glassbox"
+    //"crypto/tls"
+    "github.com/acondolu/glass"
 )
 
 
 type Router struct {}
 func (*Router) Init(string) {}
-func (*Router) Dial(glassbox.Entity) (net.Conn, error) { return nil, nil }
-func (*Router) Send(glassbox.Packet) error { return nil }
+func (*Router) Dial(glass.Peer) (net.Conn, error) { return nil, nil }
+func (*Router) Send(glass.Frame) error { return nil }
 func (*Router) IncomingConnection(net.Conn) {}
-func (*Router) ProcessSimplePacket(*glassbox.SimplePacket) { }
-func (*Router) ProcessTestPacket(*glassbox.TestPacket) { }
+func (*Router) ProcessSimpleFrame(*glass.SimpleFrame) {}
+func (*Router) ProcessTestFrame(*glass.TestFrame) {}
 
-func (r *Router) Start(cert *tls.Certificate) (err error) {
+func (r *Router) Serve() (err error) {
     var ln net.Listener
     var conn net.Conn
 	ln, err = net.Listen("tcp", ":8081")
@@ -30,8 +30,8 @@ func (r *Router) Start(cert *tls.Certificate) (err error) {
 			time.Sleep(time.Second)
 			continue
 		}
-        stream := new(glassbox.PacketStream)
-        if err = stream.In(r, conn, cert); err != nil {
+        stream := new(glass.FrameStream)
+        if err = stream.In(r, conn); err != nil {
             stream.Shutdown(err)
             return // FIXME
         }
