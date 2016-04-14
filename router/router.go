@@ -1,8 +1,8 @@
 package router
 
 import (
-    "net"
-    "time"
+    //"net"
+    //"time"
     //"crypto/tls"
     "github.com/acondolu/glass"
 )
@@ -12,6 +12,7 @@ type Router struct {
     glass.App
 }
 
+/* FIXME!!!
 func (r *Router) Serve() (err error) {
     var ln net.Listener
     var conn net.Conn
@@ -35,3 +36,4 @@ func (r *Router) Serve() (err error) {
 	}
     return nil
 }
+*/

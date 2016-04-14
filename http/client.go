@@ -11,8 +11,8 @@ import (
 
 var app *glass.App
 
-func Init(auth glass.AuthToken, ready func()) {
-    app.Init(auth)
+func Init(token glass.AuthToken, ready func()) {
+    app.Token = token
 }
 
 type Transport struct {
