@@ -1,17 +1,14 @@
 package glass
 
 import (
-    "crypto/rsa"
-    "net"
+    //"crypto/rsa"
+//    "net"
 )
 
 type AuthToken struct {
-    // Router data
-    RouterHost string
-    RouterIP net.IP
-    RouterPublicKey rsa.PublicKey
+    Router *Peer
     // My data
-    PublicKey rsa.PublicKey
+    Me *Peer
     ApplicationID [16]byte
     AppToken [16]byte
     AppSecret [16]byte

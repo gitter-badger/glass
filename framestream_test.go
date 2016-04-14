@@ -1,7 +1,7 @@
 package glass
 
 import (
-    "net"
+//    "net"
     //"io/ioutil"
     "testing"
     //"crypto/rsa"
@@ -10,73 +10,46 @@ import (
     //"sync"
 )
 
-var fs FrameStream
+var app *App
 
 func ProcessTestFrame(p *TestFrame) {
     fmt.Println("[S] Frame Received Correctly. Exiting...")
-    fs.Shutdown(nil)
+    app.Close()
 }
 
 func Test(t *testing.T) {
     fmt.Println("[-] Starting")
     go func() {
+        var err error
+        var stream *FrameStream
         fmt.Println("[C] Client goroutine started. Dialing...")
-        conn, err := net.Dial("tcp", "localhost:3001")
-        if err != nil {
+        token := AuthToken{
+            Router: &Peer{ Addr: "localhost:3001" },
+        }
+        var app = &App{ Token: token }
+        defer app.Close()
+        if stream, err = app.Connect(); err != nil {
             t.Fatal(err)
         }
         fmt.Println("[C] Connected")
-        defer conn.Close()
+        defer app.Close()
 
-        ps := new(FrameStream)
-        fmt.Println("[C] Starting Handshake")
-        if err := ps.Out(nil, conn); err != nil {
-            t.Fatal(err.Error())
-        }
-        fmt.Println("[C] Handshake Over")
-        p := new(TestFrame)
-        err = ps.Send(p)
+        var p = new(TestFrame)
+        err = stream.Send(p)
         if err != nil {
             fmt.Println(err.Error())
         }
-        //ps.init(STREAM_)
-        //        t.Fatal(g, e)
-        conn.Close()
     }()
 
-    l, err := net.Listen("tcp", "localhost:3001")
-    if err != nil {
-        t.Fatal(err)
+    fmt.Println("[S] Starting app server")
+    app = &App{
+        Token: AuthToken{ Me: &Peer{Addr:"localhost:3001"} },
+        ProcessTestFrame: ProcessTestFrame,
     }
-    defer l.Close()
-    fmt.Println("[S] Listening to connections")
-    //for {
-        conn, err := l.Accept()
-        fmt.Println("[S] Connection accepted")
-        if err != nil {
-            return
-        }
-        defer conn.Close()
-        defer conn.Close()
-        app := &App{ProcessTestFrame: ProcessTestFrame}
-        fmt.Println("[S] Starting Handshake")
-        if err = fs.In(app, conn); err != nil {
-            t.Fatal(err)
-            return
-        }
-        fmt.Println("[S] Handshake Over")
-        //_ = ps.In;
-        //buf, err := ioutil.ReadAll(conn)
-        //if err != nil {
-        //    t.Fatal(err)
-        //}
-
-        //fmt.Println("Received %d bytes: %s.", len(buf), string(buf[:]))
-        //if msg := string(buf[:]); msg != message {
-        //    t.Fatalf("Unexpected message:\nGot:\t\t%s\nExpected:\t%s\n", msg, message)
-        //}
-        fs.Serve()
-    //    break
-    //}
-    //return // Done
+    fmt.Println("[S] Starting Handshake")
+    if err := app.ListenAndServe(); err != nil {
+        t.Fatal(err)
+        return
+    }
+    app.Block()
 }

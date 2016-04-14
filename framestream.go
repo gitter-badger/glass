@@ -13,18 +13,25 @@ import (
     //"crypto/rsa"
     "io"
     "log"
+    //"time"
+)
+
+type StreamDirection int
+const (
+    STREAM_IN = 0
+    STREAM_OUT = 1
 )
 
 type FrameStream struct {
-    conn net.Conn
+    FrameHandler func([]byte)
+    Direction StreamDirection
+    Conn net.Conn
     // AES-GCM values
     secret [16]byte // AES-128
     nonce_init [12]byte // 96-bits
     // Frames counter
     count_in uint32
     count_out uint32
-    //
-    app *App
 }
 
 var CLIENT_HELLO []byte
@@ -41,6 +48,17 @@ func init() {
     strongCipherSuites = []uint16{tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA}
     //
     RNG = rand.Reader
+}
+
+func (stream *FrameStream) Handshake() error {
+    switch stream.Direction {
+    case STREAM_IN:
+        return stream.in()
+    case STREAM_OUT:
+        return stream.out()
+    default:
+    }
+    return errors.New("FrameStream.Handshake: Invalid stream direction.")
 }
 
 func shuffle(x []byte) {
@@ -84,15 +102,25 @@ func (stream *FrameStream) nonce(n uint32) ([]byte, error) {
     return b, nil
 }
 
-func (this *FrameStream) In(app *App, conn net.Conn) (err error) {
-    this.conn = conn
-    this.app = app
+/*func (stream *FrameStream) Dial(app *App, router *Peer) error {
+    conn, err := net.Dial("tcp", "localhost:3001")
+    if err != nil { err }
+    stream.In(app, conn)
+}*/
 
+func (this *FrameStream) in() (err error) {
+    var conn = this.Conn
     // Phase 1: HELLO
     eight := make([]byte, 8)
-    if _, err = conn.Read(eight); err != nil { return }
-    if !bytes.Equal(eight, CLIENT_HELLO) { return nil } // FIXME
-    if _, err = conn.Write(SERVER_HELLO); err != nil { return }
+    if _, err = conn.Read(eight); err != nil {
+        return errors.New("FrameStream.In: Can't read Client Hello")
+    }
+    if !bytes.Equal(eight, CLIENT_HELLO) {
+        return errors.New("FrameStream.In: Wrong Client Hello")
+    }
+    if _, err = conn.Write(SERVER_HELLO); err != nil {
+        return errors.New("FrameStream.In: Can't write Server Hello")
+    }
 
     // Phase 2: (Authenticate & establish forward secrecy)
     // for now, just negotiate a TLS connection
@@ -100,7 +128,7 @@ func (this *FrameStream) In(app *App, conn net.Conn) (err error) {
     caCertPool := x509.NewCertPool()
     caCertPool.AddCert(cert.Leaf)
     tlsConfig := &tls.Config{
-        CipherSuites: strongCipherSuites,
+        //CipherSuites: strongCipherSuites,
         Certificates: []tls.Certificate{cert},
         ClientCAs: caCertPool,
         ClientAuth: tls.VerifyClientCertIfGiven,
@@ -120,15 +148,13 @@ func (this *FrameStream) In(app *App, conn net.Conn) (err error) {
     // Generate AES data
     this.generateSecret(x, y)
 
-    this.count_in = 0
-    this.count_out = 1
+    this.count_in = 1
+    this.count_out = 0
     return
 }
 
-func (this *FrameStream) Out(app *App, conn net.Conn) (err error) {
-    this.conn = conn
-    this.app = app
-
+func (this *FrameStream) out() (err error) {
+    var conn = this.Conn
     // Phase 1: HELLO
     eight := make([]byte, 8)
     if _, err = conn.Write(CLIENT_HELLO); err != nil { return }
@@ -169,9 +195,9 @@ func (this *FrameStream) Out(app *App, conn net.Conn) (err error) {
     // - Generate AES128-GCM data
     this.generateSecret(x, y)
 
-    this.count_in = 1
-    this.count_out = 0
-    return
+    this.count_in = 0
+    this.count_out = 1
+    return nil
 }
 
 func (s *FrameStream) Send(p Frame) error {
@@ -207,23 +233,26 @@ func (s *FrameStream) write(p Frame) (err error) {
     two := make([]byte, 2)
     if _, err = buf.Read(two); err != nil { return }
     log.Printf("[->] Send length: %s\n", string(two[:]))
-    s.conn.Write(two)
+    s.Conn.Write(two)
     s.count_out += 2
     // 2) Send initialization vector
     //if _, err = io.ReadFull(rand.Reader, iv); err != nil { return }
     //conn.Write(iv)
     // 3) Send AES128-encrypted data
-    _, err = s.conn.Write(data)
+    _, err = s.Conn.Write(data)
     log.Println("[->] Frame sent")
     return
 }
 
-func (this *FrameStream) Close() {
-    this.conn.Write([]byte{'\x00', '\x00'})
-}
-
-func (s *FrameStream) Shutdown(cause error) error {
-    return s.conn.Close()
+func (stream *FrameStream) Close() (err error) {
+    if stream.Conn != nil {
+        log.Println("Closing stream connection")
+        // Try to close it gently
+        // TODO setWriteDeadline
+        stream.Conn.Write([]byte{'\x00', '\x00'})
+        err = stream.Conn.Close()
+    }
+    return
 }
 
 func (s *FrameStream) Serve() {
@@ -234,8 +263,9 @@ func (s *FrameStream) Serve() {
     var length uint16
     var err error
     //var secret = s.secret
-    conn := s.conn
-    defer s.Shutdown(nil)
+    var conn = s.Conn
+    //conn.SetReadDeadline(time.Time(0)) // FIXME
+    defer s.Close()
     for {
         // Compute nonce
         if nonce, err = s.nonce(s.count_in); err != nil { break }
@@ -261,7 +291,6 @@ func (s *FrameStream) Serve() {
         s.processFrame(data, nonce)
     }
     log.Println("[<-] Goodbye")
-    s.Shutdown(err)
 }
 
 func (stream *FrameStream) processFrame(ciphertext, nonce []byte) {
@@ -279,5 +308,5 @@ func (stream *FrameStream) processFrame(ciphertext, nonce []byte) {
         return
     }
     log.Println("[  ] Incoming packet correctly decrypted")
-    stream.app.processFrame(payload)
+    stream.FrameHandler(payload)
 }
