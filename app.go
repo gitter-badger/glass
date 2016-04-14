@@ -8,12 +8,24 @@ import (
 
 type App struct {
     Token AuthToken
-    stream FrameStream
+
+    // Connection storage
+    listeners map[*net.Listener]bool
+    streams map[*FrameStream]bool
+
+    /*
+    MaxWorkers int
+    MaxWorkersFrames int
+    MaxWorkersFrames int
+	MaxQueueFrames int
+    */
+
+    didInit bool
     // Exit channel
     shouldClose chan bool
     // Connection State callback
-    //ConnState func(net.Conn, ConnState)
-    // Connection Handlers (future...)
+    // ConnState func(net.Conn, ConnState)
+    // Connection Handlers
     IncomingConnection func(Peer, net.Conn)
     // Frames Handlers
     ProcessSimpleFrame func(*SimpleFrame)
@@ -22,9 +34,13 @@ type App struct {
 
 func (app *App) init() {
     app.shouldClose = make(chan bool)
+    app.streams = make(map[*FrameStream]bool)
+    app.listeners = make(map[*net.Listener]bool)
+    app.didInit = true
 }
 
 func (app *App) Connect() (stream *FrameStream, err error) {
+    if !app.didInit { app.init() }
     if app.Token.Router == nil {
         return nil, errors.New("Can't connect app: no router specified.")
     }
@@ -37,39 +53,52 @@ func (app *App) Connect() (stream *FrameStream, err error) {
         FrameHandler: app.frameHandler,
     }
     if err = stream.Handshake(); err != nil { return }
-    app.stream = *stream
+    app.streams[stream] = true
     return
 }
 
-func (app *App) ListenAndServe() error {
+func (app *App) ListenAndServe() (err error) {
+    if !app.didInit { app.init() }
     if app.Token.Me == nil {
         return errors.New("Can't connect app: no self specified.")
     }
-    l, err := net.Listen("tcp", app.Token.Me.Addr)
-    if err != nil {
-        return err
-    }
-    defer l.Close()
+    var lstn net.Listener
+    lstn, err = net.Listen("tcp", app.Token.Me.Addr)
+    if err != nil { return err }
+    //defer lstn.Close()
+    var conn net.Conn
     for {
-        conn, err := l.Accept()
+        conn, err = lstn.Accept()
         if err != nil { continue }
-        // FIXME multiple connections
-        var stream = FrameStream{
+        var stream = &FrameStream{
             Conn: conn,
             Direction: STREAM_IN,
             FrameHandler: app.frameHandler,
         }
         if err = stream.Handshake(); err != nil { continue }
-        app.stream = stream
+        app.streams[stream] = true
         go stream.Serve()
         break // FIXME it now accepts only one stream!
     }
     return nil
 }
 
-func (app *App) Close() (err error) {
+func (app *App) Close() {
     log.Println("Close called")
-    err = app.stream.Close()
+    if !app.didInit { return }
+    // Close all open streams
+    for s := range app.streams {
+        if s.Close() == nil {
+            delete(app.streams, s)
+        }
+    }
+    // Close all listeners
+    for ln, _ := range app.listeners {
+        if (*ln).Close() == nil {
+            delete(app.listeners, ln)
+        }
+    }
+
     if app.shouldClose != nil {
         close(app.shouldClose)
         //app.shouldClose = nil
@@ -78,7 +107,7 @@ func (app *App) Close() (err error) {
 }
 
 func (app *App) Block() {
-    if app.shouldClose == nil { app.init() }
+    if !app.didInit { return }
     <-app.shouldClose
 }
 
