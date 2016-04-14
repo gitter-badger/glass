@@ -1,15 +1,12 @@
 package glass
 
 import (
-//    "net"
-    //"io/ioutil"
     "testing"
-    //"crypto/rsa"
-    //"math/big"
     "fmt"
-    //"sync"
 )
 
+// Global app variable
+// (in order to stop the app when finished)
 var app *App
 
 func ProcessTestFrame(p *TestFrame) {
@@ -20,33 +17,33 @@ func ProcessTestFrame(p *TestFrame) {
 func Test(t *testing.T) {
     fmt.Println("[-] Starting")
     go func() {
+        fmt.Println("[C] Client GoRoutine")
         var err error
         var stream *FrameStream
-        fmt.Println("[C] Client goroutine started. Dialing...")
+        // Authorization token with a peer's address sepcified
         token := AuthToken{
             Router: &Peer{ Addr: "localhost:3001" },
         }
         var app = &App{ Token: token }
-        defer app.Close()
         if stream, err = app.Connect(); err != nil {
             t.Fatal(err)
         }
-        fmt.Println("[C] Connected")
+        fmt.Println("[C] Client App Connected")
         defer app.Close()
 
         var p = new(TestFrame)
-        err = stream.Send(p)
-        if err != nil {
-            fmt.Println(err.Error())
+        if stream.Send(p) != nil {
+            t.Fatal(err)
         }
+        fmt.Println("[C] Test Frame Sent")
     }()
 
-    fmt.Println("[S] Starting app server")
+    fmt.Println("[S] Starting Server App")
     app = &App{
         Token: AuthToken{ Me: &Peer{Addr:"localhost:3001"} },
         ProcessTestFrame: ProcessTestFrame,
     }
-    fmt.Println("[S] Starting Handshake")
+    fmt.Println("[S] Listen & Server")
     if err := app.ListenAndServe(); err != nil {
         t.Fatal(err)
         return

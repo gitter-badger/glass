@@ -9,11 +9,19 @@ import (
 type App struct {
     Token AuthToken
     stream FrameStream
+    // Exit channel
+    shouldClose chan bool
+    // Connection State callback
+    //ConnState func(net.Conn, ConnState)
     // Connection Handlers (future...)
     IncomingConnection func(Peer, net.Conn)
     // Frames Handlers
     ProcessSimpleFrame func(*SimpleFrame)
     ProcessTestFrame func(*TestFrame)
+}
+
+func (app *App) init() {
+    app.shouldClose = make(chan bool)
 }
 
 func (app *App) Connect() (stream *FrameStream, err error) {
@@ -44,32 +52,34 @@ func (app *App) ListenAndServe() error {
     defer l.Close()
     for {
         conn, err := l.Accept()
-        if err != nil {
-            continue // FIXME
-        }
+        if err != nil { continue }
         // FIXME multiple connections
         var stream = FrameStream{
             Conn: conn,
             Direction: STREAM_IN,
             FrameHandler: app.frameHandler,
         }
-        if err = stream.Handshake(); err != nil {
-            // FIXME maybe close stream?
-            continue
-        }
+        if err = stream.Handshake(); err != nil { continue }
         app.stream = stream
-        stream.Serve()
-        break // FIXME
+        go stream.Serve()
+        break // FIXME it now accepts only one stream!
     }
     return nil
 }
 
-func (app *App) Close() error {
-    return app.stream.Close()
+func (app *App) Close() (err error) {
+    log.Println("Close called")
+    err = app.stream.Close()
+    if app.shouldClose != nil {
+        close(app.shouldClose)
+        //app.shouldClose = nil
+    }
+    return
 }
 
 func (app *App) Block() {
-
+    if app.shouldClose == nil { app.init() }
+    <-app.shouldClose
 }
 
 func (*App) Dial(Peer) (net.Conn, error) {
