@@ -32,6 +32,8 @@ type FrameStream struct {
     // Frames counter
     count_in uint32
     count_out uint32
+    // Queue
+    queue [][]byte
 }
 
 var CLIENT_HELLO []byte
@@ -208,38 +210,28 @@ func (s *FrameStream) Send(p Frame) error {
 func (s *FrameStream) write(p Frame) (err error) {
     // See: https://gist.github.com/kkirsche/e28da6754c39d5e7ea10
     data := p.Bytes()
-    size := len(data)
-    if size % 16 != 0 || size == 0 {
+    length := len(data)
+    if length == 0 || length % 16 != 0 {
         return errors.New("Wrong packet size")
     }
     // Encrypt data with AES128-GCM
-    var block cipher.Block
-    var aesgcm cipher.AEAD
-    var nonce []byte
-    if block, err = aes.NewCipher(s.secret[:]); err != nil { return }
-	if nonce, err = s.nonce(s.count_out); err != nil { return }
-	if aesgcm, err = cipher.NewGCM(block); err != nil { return }
-	data = aesgcm.Seal(nil, nonce, data, nil)
+    if block, err := aes.NewCipher(s.secret[:]); err != nil { return }
+    if nonce, err := s.nonce(s.count_out); err != nil { return }
+    if aesgcm, err := cipher.NewGCM(block); err != nil { return }
+    ciphertext := aesgcm.Seal(nil, nonce, data, nil)
 
-    // Send size of the payload (2 bytes)
-    if len(data) != size + 16 {
-        log.Printf("%d %d", len(data), size)
-        return errors.New("AES-GCM encryption wrong packet size")
-        // Should never happen FIXME CHECk
-    }
-    buf := new(bytes.Buffer)
-    err = binary.Write(buf, binary.BigEndian, uint16(1 + size / 16))
-    if err != nil { return }
-    two := make([]byte, 2)
-    if _, err = buf.Read(two); err != nil { return }
-    log.Printf("[->] Send length: %s\n", string(two[:]))
-    s.Conn.Write(two)
+    ret := new(bytes.Buffer)
+    // Write the length of the payload (2 bytes)
+    // Since we are using AES-GCM, the new length
+    // of the data will be the old length plus gcmTagSize,
+    // which is 16 bytes
+    // assert len(data) == length + gcmTagSize
+    writeLength(ret, uint16(1 + length / 16))
     s.count_out += 2
-    // 2) Send initialization vector
-    //if _, err = io.ReadFull(rand.Reader, iv); err != nil { return }
-    //conn.Write(iv)
-    // 3) Send AES128-encrypted data
-    _, err = s.Conn.Write(data)
+    // Write ciphertext
+    _, err = ret.Write(ciphertext)
+    // Send the frame
+    s.out.Write(ret.Bytes())
     log.Println("[->] Frame sent")
     return
 }
@@ -299,7 +291,7 @@ func (stream *FrameStream) processFrame(ciphertext, nonce []byte) {
     var aesgcm cipher.AEAD
     log.Println("[--] Processing incoming packet")
     if block, err = aes.NewCipher(stream.secret[:]); err != nil { return }
-	if aesgcm, err = cipher.NewGCM(block); err != nil { return }
+    if aesgcm, err = cipher.NewGCM(block); err != nil { return }
     payload, err := aesgcm.Open(nil, nonce, ciphertext, nil)
     if err != nil {
         // If the message was not encrypted correctly,
