@@ -4,7 +4,6 @@ import (
     "net"
     "errors"
     "bytes"
-    "encoding/binary"
     "crypto/rand"
     "crypto/tls"
 //    "crypto/x509"
@@ -14,47 +13,55 @@ import (
     //"crypto/rsa"
     "io"
     "log"
+    "fmt"
+    "bufio"
     //"time"
 )
 
 type StreamDirection int
 const (
-    STREAM_IN = 0
+    STREAM_IN = -1
     STREAM_OUT = 1
 )
+var client_hello []byte
+var server_hello []byte
+var strongCipherSuites []uint16
+var rng io.Reader
 
 type FrameStream struct {
-    FrameHandler func([]byte)
+    FrameHandler func(string, []byte)
     Direction StreamDirection
     Conn net.Conn
+    in io.Reader
+    out io.Writer
     // FNV-1 counters
     hash_in hash.Hash
     hash_out hash.Hash
     // AES-GCM values
-    secret [16]byte // AES-128
+    secret []byte // 16 bytes for AES-128
     nonce_init [12]byte // 96-bits
     // Frames counter
-    count_in uint32
-    count_out uint32
+    in_seq_no uint32
+    out_seq_no uint32
+    // Queue
+    queue [][]byte
 }
-
-var CLIENT_HELLO []byte
-var SERVER_HELLO []byte
-var strongCipherSuites []uint16
-var RNG io.Reader
 
 // Initialize global constants
 func init() {
     // HELLO constants
-    CLIENT_HELLO = []byte("01234567") // First message sent from client
-    SERVER_HELLO = []byte("76543210") // Response to a client hello
+    client_hello = []byte("01234567") // First message sent from client
+    server_hello = []byte("76543210") // Response to a client hello
     // Choose cipher suites
     strongCipherSuites = []uint16{tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA}
-    //
-    RNG = rand.Reader
+    // Set up the Random Numbers Generator
+    rng = rand.Reader
 }
 
 func (stream *FrameStream) Handshake() error {
+    // Initialize buffered I/O
+    stream.in = bufio.NewReader(stream.Conn)
+    stream.out = bufio.NewWriter(stream.Conn)
     // Initialize hashes
     stream.hash_in = NewFNV1()
     stream.hash_out = NewFNV1()
@@ -87,6 +94,7 @@ func shuffle(x []byte) {
 
 // Generate a AES128 key with a 96-bit nonce for GCM mode
 func (this *FrameStream) generateSecret(x, y []byte) {
+    this.secret = make([]byte, 16)
     // Generate AES key
     copy(this.secret[0:8], x[0:8])
     copy(this.secret[8:16], y[0:8])
@@ -96,16 +104,18 @@ func (this *FrameStream) generateSecret(x, y []byte) {
     // Shuffle the bytes. Unnecessary? But fun.
     shuffle(this.secret[:])
     shuffle(this.nonce_init[:])
+    // Initialize hashes
+    this.hash_in.Write(x[14:16])
+    this.hash_out.Write(y[14:16])
 }
 
 // Generate a unique nonce for the given n in the current session
-func (stream *FrameStream) nonce(n uint32) ([]byte, error) {
+func (stream *FrameStream) nonce(seq_no uint32) (b []byte, err error) {
     buf := new(bytes.Buffer)
-    err := binary.Write(buf, binary.BigEndian, n)
-    b := make([]byte, 12)
+    write_uint32(buf, seq_no)
+    N := buf.Next(4)
+    b = make([]byte, 12)
     copy(b, stream.nonce_init[:])
-    N := make([]byte, 4)
-    if _, err = buf.Read(N); err != nil { return nil, err}
     b[0] ^= N[0]; b[3] ^= N[1]; b[6] ^= N[2]; b[9] ^= N[3]
     return b, nil
 }
@@ -116,20 +126,20 @@ func (stream *FrameStream) nonce(n uint32) ([]byte, error) {
     stream.In(app, conn)
 }*/
 
-func (this *FrameStream) server() (err error) {
-    var conn = this.Conn
+func (stream *FrameStream) server() (err error) {
+    fmt.Println("[Server] Starting server handshake")
     // Phase 1: HELLO
     eight := make([]byte, 8)
-    if _, err = conn.Read(eight); err != nil {
+    if _, err = stream.Conn.Read(eight); err != nil {
         return errors.New("FrameStream.In: Can't read Client Hello")
     }
-    if !bytes.Equal(eight, CLIENT_HELLO) {
+    if !bytes.Equal(eight, client_hello) {
         return errors.New("FrameStream.In: Wrong Client Hello")
     }
-    if _, err = conn.Write(SERVER_HELLO); err != nil {
+    if _, err = stream.Conn.Write(server_hello); err != nil {
         return errors.New("FrameStream.In: Can't write Server Hello")
     }
-
+    log.Println("[Server] Simple Hello Phase Over")
     // Phase 2: (Authenticate & establish forward secrecy)
     // for now, just negotiate a TLS connection
     /* FIXME TODO
@@ -149,26 +159,27 @@ func (this *FrameStream) server() (err error) {
     // Phase 3: Agree on a secret, forget about TLS
     x := make([]byte, 16)
     y := make([]byte, 16)
-    if _, err = conn.Read(x); err != nil { return }
-    // - Send my secret
-    if _, err = io.ReadFull(rand.Reader, y); err != nil { return }
-    if _, err = conn.Write(y); err != nil { return }
+    // Read client_random
+    if _, err = stream.Conn.Read(x); err != nil { return }
+    // Send server_random
+    if _, err = io.ReadFull(rng, y); err != nil { return }
+    if _, err = stream.Conn.Write(y); err != nil { return }
     // Generate AES data
-    this.generateSecret(x, y)
+    stream.generateSecret(x, y)
 
-    this.count_in = 1
-    this.count_out = 0
+    stream.in_seq_no = 1
+    stream.out_seq_no = 0
     return
 }
 
-func (this *FrameStream) client() (err error) {
-    var conn = this.Conn
+func (stream *FrameStream) client() (err error) {
+    fmt.Println("[Client] Starting client handshake.")
     // Phase 1: HELLO
     eight := make([]byte, 8)
-    if _, err = conn.Write(CLIENT_HELLO); err != nil { return }
-    if _, err = conn.Read(eight); err != nil { return }
-    if !bytes.Equal(eight, SERVER_HELLO) { return nil } // FIXME
-    log.Println("[->] Simple Hello Phase Over")
+    if _, err = stream.Conn.Write(client_hello); err != nil { return }
+    if _, err = stream.Conn.Read(eight); err != nil { return }
+    if !bytes.Equal(eight, server_hello) { return nil } // FIXME
+    log.Println("[Client] Simple Hello Phase Over")
 
     // Phase 2: Negotiate TLS connection
     // This is temporary: in the future, the session
@@ -192,69 +203,70 @@ func (this *FrameStream) client() (err error) {
     var peerCertificates = tlsConn.ConnectionState().PeerCertificates
     */
 
-    // Phase 3: Agree on a secret, forget about TLS
+    // Phase 3: Exchange random, forget about TLS
     x := make([]byte, 16)
     y := make([]byte, 16)
-    // - Send my secret
-    if _, err = io.ReadFull(rand.Reader, x); err != nil { return }
-    if _, err = conn.Write(x); err != nil { return }
-    // - Read client's secret
-    if _, err = conn.Read(y); err != nil { return }
+    // - Send client_random
+    if _, err = io.ReadFull(rng, x); err != nil { return }
+    if _, err = stream.Conn.Write(x); err != nil { return }
+    // - Read server_random
+    if _, err = stream.Conn.Read(y); err != nil { return }
     // - Generate AES128-GCM data
-    this.generateSecret(x, y)
+    stream.generateSecret(x, y)
 
-    this.count_in = 0
-    this.count_out = 1
+    stream.in_seq_no = 0
+    stream.out_seq_no = 1
     return nil
 }
 
-func (s *FrameStream) Send(p Frame) error {
+func (stream *FrameStream) Send(f Frame) error {
     // FIXME: queue
-    return s.write(p)
+    return stream.write(f)
 }
 
 func (s *FrameStream) write(p Frame) (err error) {
     // See: https://gist.github.com/kkirsche/e28da6754c39d5e7ea10
     data := p.Bytes()
-    size := len(data)
-    if size % 16 != 0 || size == 0 {
+    length := len(data)
+    if length == 0 || length % 16 != 0 {
         return errors.New("Wrong packet size")
     }
     // Encrypt data with AES128-GCM
-    var block cipher.Block
-    var aesgcm cipher.AEAD
-    var nonce []byte
-    if block, err = aes.NewCipher(s.secret[:]); err != nil { return }
-	if nonce, err = s.nonce(s.count_out); err != nil { return }
-	if aesgcm, err = cipher.NewGCM(block); err != nil { return }
-	data = aesgcm.Seal(nil, nonce, data, nil)
-
-    // Send header
-    //////////////////////////////////////////////////////
-    TO DO HERE:
-    fix the new header with hashing and counting
-    s.hash_out.Write(payload)
-    ^%^&*^%$#$%^&%$#@$%^&^%$#@$%^&%$#@$%^
-    //////////////////////////////////////////////////////
-    // Send size of the payload (2 bytes)
-    if len(data) != size + 16 {
-        log.Printf("%d %d", len(data), size)
-        return errors.New("AES-GCM encryption wrong packet size")
-        // Should never happen FIXME CHECk
-    }
-    buf := new(bytes.Buffer)
-    err = binary.Write(buf, binary.BigEndian, uint16(1 + size / 16))
+    block, err := aes.NewCipher(s.secret)
     if err != nil { return }
-    two := make([]byte, 2)
-    if _, err = buf.Read(two); err != nil { return }
-    s.Conn.Write(two)
-    s.count_out += 2
-    // 2) Send initialization vector
-    //if _, err = io.ReadFull(rand.Reader, iv); err != nil { return }
-    //conn.Write(iv)
-    // 3) Send AES128-encrypted data
-    _, err = s.Conn.Write(data)
-    log.Println("[->] Frame sent")
+    nonce, err := s.nonce(s.out_seq_no)
+    fmt.Printf("??? %b", nonce)
+    fmt.Printf("???! %b", s.secret)
+    if err != nil { return }
+    aesgcm, err := cipher.NewGCM(block)
+    if err != nil { return }
+    ciphertext := aesgcm.Seal(nil, nonce, data, nil)
+
+    // Write header
+    //////////////////////////////////////////////////////
+    // TO DO HERE:
+    // fix the new header with hashing and counting
+    // s.hash_out.Write(ciphertext)
+    // ^%^&*^%$#$%^&%$#@$%^&^%$#@$%^&%$#@$%^
+    //////////////////////////////////////////////////////
+    ret := new(bytes.Buffer)
+    // Write the length of the payload (2 bytes)
+    // Since we are using AES-GCM, the new length
+    // of the data will be the old length plus gcmTagSize,
+    // which is 16 bytes
+    // assert len(data) == length + gcmTagSize
+    write_uint16(ret, uint16(length / 16))
+    s.out_seq_no += 2
+    // Write frame type
+    ret.WriteString(p.Type())
+    // Write in_seq_no
+    write_uint32(ret, s.in_seq_no)
+    // Write ciphertext
+    _, err = ret.Write(ciphertext)
+    // Send the frame
+    fmt.Printf("[Client] Sending frame Length=%d\n", len(ciphertext))
+    s.Conn.Write(ret.Bytes())
+    fmt.Println("[Client] Frame sent")
     return
 }
 
@@ -263,62 +275,69 @@ func (stream *FrameStream) Close() (err error) {
         log.Println("Closing stream connection")
         // Try to close it gently
         // TODO setWriteDeadline
-        stream.Conn.Write([]byte{'\x00', '\x00'})
+        stream.Conn.Write([]byte("\x00\x00\x00\x00\x00\x00\x00\x00"))
         err = stream.Conn.Close()
     }
     return
 }
 
-func (s *FrameStream) Serve() {
+func (stream *FrameStream) Serve() {
     var nonce []byte
     var eight [8]byte
     var header string
     var data []byte
-    var buf *bytes.Reader
-    var length uint16
+    var length int
     var err error
-    //var secret = s.secret
-    var conn = s.Conn
+    var conn = stream.Conn
     //conn.SetReadDeadline(time.Time(0)) // FIXME
-    defer s.Close()
+    defer stream.Close()
     for {
         // Compute nonce
-        if nonce, err = s.nonce(s.count_in); err != nil { break }
+        if nonce, err = stream.nonce(stream.in_seq_no); err != nil { break }
+        fmt.Printf("!!! %b", nonce)
+        fmt.Printf("???! %b", stream.secret)
         // Read eight bytes
-        if _, err = conn.Read(eight[:]); err != nil { break }
+        if _, err = conn.Read(eight[:]); err != nil {
+            fmt.Println("[Server] Error reading packet header: %e.", err)
+        break }
+        log.Println("[<-] Incoming packet.")
         // Increment packet count
-        s.count_in += 2
-        header = string(eight) ^ s.hash_in.Sum(nil)
-        // Convert length from bytes
-        buf = bytes.NewReader(header[0:2])
-        err = binary.Read(buf, binary.BigEndian, &length)
+        stream.in_seq_no += 2
+        header = string(eight[:]) // ^ string(stream.hash_in.Sum(nil)) FIXME
+        if len(header) != 8 {
+            fmt.Printf("[<-] Wrong header length %d.\n", len(header))
+            break
+        } // FIXME
+        fmt.Printf("[<-] Header: %s.\n", header)
+        length = int(read_uint16(header[0:2]))
         // Should we close the connection?
-        if length == 0 { break }
-        log.Printf("[<-] Incoming packet. Size=%d\n", length)
-        // FIXME Check number of packets
-        var no int32
-        buf = bytes.NewReader(header[4:8])
-        err = binary.Read(buf, binary.BigEndian, &no)
-        if no > s.count_out { break }
-        // Read *length* blocks of data
-        data = make([]byte, int(length) * 16)
-        _, err = conn.Read(data)
-        if err != nil {
+        if length == 0 {
+            fmt.Println("[Server] Empty frame. Exiting.")
             break
         }
+        length = 16 * length + 16
+        fmt.Printf("[Server] Incoming packet. Length: %d.\n", length)
+        // FIXME Check number of packets
+        if read_uint32(header[4:8])  > stream.out_seq_no {
+            fmt.Println("[Server] Wrong sequence number. Closing connection")
+            break
+        }
+        // Read *length* blocks of data
+        data = make([]byte, length)
+        if _, err = conn.Read(data); err != nil { break }
         // Process packet
-        s.processFrame(string(string[2:4]), data, nonce)
+        go stream.handleFrame(string(header[2:4]), data, nonce)
     }
-    log.Println("[<-] Goodbye")
+    log.Println("[Server] Goodbye")
 }
 
-func (stream *FrameStream) processFrame(frame_type string, ciphertext, nonce []byte) {
+func (stream *FrameStream) handleFrame(frame_type string, ciphertext, nonce []byte) {
     var err error
     var block cipher.Block
     var aesgcm cipher.AEAD
     log.Println("[--] Processing incoming packet")
-    if block, err = aes.NewCipher(stream.secret[:]); err != nil { return }
-	if aesgcm, err = cipher.NewGCM(block); err != nil { return }
+    if block, err = aes.NewCipher(stream.secret); err != nil { return }
+    if aesgcm, err = cipher.NewGCM(block); err != nil { return }
     payload, err := aesgcm.Open(nil, nonce, ciphertext, nil)
     if err != nil {
         // If the message was not encrypted correctly,
@@ -326,7 +345,7 @@ func (stream *FrameStream) processFrame(frame_type string, ciphertext, nonce []b
         log.Println("Message decryption failed")
         return
     }
-    s.hash_in.Write(payload)
+    // stream.hash_in.Write(payload) // FIXME
     log.Println("[  ] Incoming packet correctly decrypted")
     stream.FrameHandler(frame_type, payload)
 }

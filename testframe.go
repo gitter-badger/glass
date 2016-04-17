@@ -17,3 +17,7 @@ func (frame *TestFrame) Read(bs []byte) bool {
     frame.Content = []byte{}
     return true
 }
+
+func (frame *TestFrame) Type() string {
+    return FRAME_TEST
+}

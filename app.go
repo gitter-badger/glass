@@ -4,6 +4,7 @@ import (
     "net"
     "log"
     "errors"
+    "fmt"
 )
 
 type App struct {
@@ -47,12 +48,18 @@ func (app *App) Connect() (stream *FrameStream, err error) {
     var conn net.Conn
     conn, err = net.Dial("tcp", app.Token.Router.Addr)
     if err != nil { return }
+    fmt.Println("Dialed")
     stream = &FrameStream{
         Conn: conn,
         Direction: STREAM_OUT,
         FrameHandler: app.frameHandler,
     }
-    if err = stream.Handshake(); err != nil { return }
+    if err = stream.Handshake(); err != nil {
+        fmt.Printf("[Client] Handshake error: %e.\n", err)
+        log.Fatal(err)
+        return
+    }
+    fmt.Println("Dialed. handshake done.")
     app.streams[stream] = true
     return
 }
@@ -75,7 +82,9 @@ func (app *App) ListenAndServe() (err error) {
             Direction: STREAM_IN,
             FrameHandler: app.frameHandler,
         }
-        if err = stream.Handshake(); err != nil { continue }
+        if err = stream.Handshake(); err != nil {
+            log.Fatal(err)
+        }
         app.streams[stream] = true
         go stream.Serve()
         break // FIXME it now accepts only one stream!
@@ -119,10 +128,8 @@ func (*App) Send(Frame) error {
 }
 
 // Decrypt the packet and give it to the app
-func (app *App) frameHandler(payload []byte) {
-    // Find out frame type
-    magic := string(payload[0:2])
-    switch magic {
+func (app *App) frameHandler(typ string, payload []byte) {
+    switch typ {
     case FRAME_SIMPLE:
         p := new(SimpleFrame)
         p.Read(payload)

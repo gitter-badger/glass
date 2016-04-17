@@ -39,14 +39,12 @@ func PKCS5Padding(src []byte, BlockSize int) ([]byte, int) {
     padding := bytes.Repeat([]byte{byte(padlen)}, padlen)
     return append(src, padding...), nblocks
 }
-*/
-
-
 func PKCS5UnPadding(src []byte) []byte {
     length := len(src)
     padlen := int(src[length-1])
     return src[:(length - padlen)]
 }
+*/
 
 /*  SimpleFrame is the base and most general packet format.
     It consists mainly of the TLS cipher:
@@ -74,7 +72,7 @@ func (frame *SimpleFrame) Seal(
     ) (err error) {
     // Generate random key
     var key [8]byte
-    if _, err = io.ReadFull(RNG, key[:]); err != nil {
+    if _, err = io.ReadFull(rng, key[:]); err != nil {
         panic("RNG failure")
     }
     // AES-encrypt payload with (key, iv)
@@ -116,7 +114,7 @@ func (frame *SimpleFrame) Seal(
 	d.Write(frame.Content)
     // FIXME: is padding missing? is it automatic?
 	hashed := d.Sum(nil)
-    signature, err := rsa.SignPKCS1v15(RNG, priv, crypto.SHA256, hashed[:])
+    signature, err := rsa.SignPKCS1v15(rng, priv, crypto.SHA256, hashed[:])
     if err != nil {
         return
     }
