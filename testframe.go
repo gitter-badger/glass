@@ -5,7 +5,7 @@ const FRAME_TEST = "\x00\x00"
 type TestFrame struct {
     Id [16]byte
     From [16]byte
-    To [16]byte
+    to [16]byte
     Content []byte
 }
 
@@ -20,4 +20,8 @@ func (frame *TestFrame) Read(bs []byte) bool {
 
 func (frame *TestFrame) Type() string {
     return FRAME_TEST
+}
+
+func (frame *TestFrame) To() string {
+    return "0123456789012345"
 }

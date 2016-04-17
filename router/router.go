@@ -10,7 +10,7 @@ import (
 
 type Router struct {
     glass.App
-    streams map[[16]byte]*FrameStream
+    streams map[string]*glass.FrameStream
 }
 
 /* FIXME!!!
@@ -46,11 +46,11 @@ type frame struct {
 
 
 
-func (this *Router) route(f *frame) {
-  stream := this.streams[f.To]
+func (this *Router) route(f glass.Frame) {
+  stream := this.streams[f.To()]
   if stream != nil {
     // Handle the datagram routing
-    stream.Queue(f.Datagram)
+    stream.Send(f)
   } else {
     // No persistency for now, discard...
     // FIXME in Alpha-2
