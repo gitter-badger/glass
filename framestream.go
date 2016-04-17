@@ -10,6 +10,7 @@ import (
 //    "crypto/x509"
     "crypto/aes"
     "crypto/cipher"
+    "hash"
     //"crypto/rsa"
     "io"
     "log"
@@ -26,6 +27,9 @@ type FrameStream struct {
     FrameHandler func([]byte)
     Direction StreamDirection
     Conn net.Conn
+    // FNV-1 counters
+    hash_in hash.Hash
+    hash_out hash.Hash
     // AES-GCM values
     secret [16]byte // AES-128
     nonce_init [12]byte // 96-bits
@@ -51,11 +55,15 @@ func init() {
 }
 
 func (stream *FrameStream) Handshake() error {
+    // Initialize hashes
+    stream.hash_in = NewFNV1()
+    stream.hash_out = NewFNV1()
+    // Continue according to stream direction
     switch stream.Direction {
     case STREAM_IN:
-        return stream.in()
+        return stream.server()
     case STREAM_OUT:
-        return stream.out()
+        return stream.client()
     default:
     }
     return errors.New("FrameStream.Handshake: Invalid stream direction.")
@@ -108,7 +116,7 @@ func (stream *FrameStream) nonce(n uint32) ([]byte, error) {
     stream.In(app, conn)
 }*/
 
-func (this *FrameStream) in() (err error) {
+func (this *FrameStream) server() (err error) {
     var conn = this.Conn
     // Phase 1: HELLO
     eight := make([]byte, 8)
@@ -153,7 +161,7 @@ func (this *FrameStream) in() (err error) {
     return
 }
 
-func (this *FrameStream) out() (err error) {
+func (this *FrameStream) client() (err error) {
     var conn = this.Conn
     // Phase 1: HELLO
     eight := make([]byte, 8)
@@ -221,6 +229,13 @@ func (s *FrameStream) write(p Frame) (err error) {
 	if aesgcm, err = cipher.NewGCM(block); err != nil { return }
 	data = aesgcm.Seal(nil, nonce, data, nil)
 
+    // Send header
+    //////////////////////////////////////////////////////
+    TO DO HERE:
+    fix the new header with hashing and counting
+    s.hash_out.Write(payload)
+    ^%^&*^%$#$%^&%$#@$%^&^%$#@$%^&%$#@$%^
+    //////////////////////////////////////////////////////
     // Send size of the payload (2 bytes)
     if len(data) != size + 16 {
         log.Printf("%d %d", len(data), size)
@@ -232,7 +247,6 @@ func (s *FrameStream) write(p Frame) (err error) {
     if err != nil { return }
     two := make([]byte, 2)
     if _, err = buf.Read(two); err != nil { return }
-    log.Printf("[->] Send length: %s\n", string(two[:]))
     s.Conn.Write(two)
     s.count_out += 2
     // 2) Send initialization vector
@@ -257,7 +271,8 @@ func (stream *FrameStream) Close() (err error) {
 
 func (s *FrameStream) Serve() {
     var nonce []byte
-    var two [2]byte
+    var eight [8]byte
+    var header string
     var data []byte
     var buf *bytes.Reader
     var length uint16
@@ -269,18 +284,22 @@ func (s *FrameStream) Serve() {
     for {
         // Compute nonce
         if nonce, err = s.nonce(s.count_in); err != nil { break }
-        // Read packet size
-        if _, err = conn.Read(two[:]); err != nil { break }
+        // Read eight bytes
+        if _, err = conn.Read(eight[:]); err != nil { break }
         // Increment packet count
         s.count_in += 2
+        header = string(eight) ^ s.hash_in.Sum(nil)
         // Convert length from bytes
-        buf = bytes.NewReader(two[:])
+        buf = bytes.NewReader(header[0:2])
         err = binary.Read(buf, binary.BigEndian, &length)
         // Should we close the connection?
-        if length == 0 {
-            break
-        }
+        if length == 0 { break }
         log.Printf("[<-] Incoming packet. Size=%d\n", length)
+        // FIXME Check number of packets
+        var no int32
+        buf = bytes.NewReader(header[4:8])
+        err = binary.Read(buf, binary.BigEndian, &no)
+        if no > s.count_out { break }
         // Read *length* blocks of data
         data = make([]byte, int(length) * 16)
         _, err = conn.Read(data)
@@ -288,12 +307,12 @@ func (s *FrameStream) Serve() {
             break
         }
         // Process packet
-        s.processFrame(data, nonce)
+        s.processFrame(string(string[2:4]), data, nonce)
     }
     log.Println("[<-] Goodbye")
 }
 
-func (stream *FrameStream) processFrame(ciphertext, nonce []byte) {
+func (stream *FrameStream) processFrame(frame_type string, ciphertext, nonce []byte) {
     var err error
     var block cipher.Block
     var aesgcm cipher.AEAD
@@ -307,6 +326,7 @@ func (stream *FrameStream) processFrame(ciphertext, nonce []byte) {
         log.Println("Message decryption failed")
         return
     }
+    s.hash_in.Write(payload)
     log.Println("[  ] Incoming packet correctly decrypted")
-    stream.FrameHandler(payload)
+    stream.FrameHandler(frame_type, payload)
 }
